@@ -237,6 +237,18 @@ static void ipa_pci_io_resume(struct pci_dev *pci_dev)
 {
 }
 
+#ifndef CONFIG_PCI
+static inline void pci_release_region(struct pci_dev *pci_dev, int bar)
+{
+}
+
+static inline int pci_request_region(struct pci_dev *pci_dev, int bar,
+				     const char *res_name)
+{
+	return -EINVAL;
+}
+#endif
+
 /* PCI Error Recovery */
 static const struct pci_error_handlers ipa_pci_err_handler = {
 	.error_detected = ipa_pci_io_error_detected,
@@ -456,7 +468,7 @@ EXPORT_SYMBOL(ipa_smmu_free_sgt);
 
 static int ipa_pm_notify(struct notifier_block *b, unsigned long event, void *p)
 {
-	IPAERR("Entry\n");
+	IPADBG("Entry\n");
 	switch (event) {
 		case PM_POST_SUSPEND:
 #ifdef CONFIG_DEEPSLEEP
@@ -468,7 +480,7 @@ static int ipa_pm_notify(struct notifier_block *b, unsigned long event, void *p)
 #endif
 			break;
 	}
-	IPAERR("Exit\n");
+	IPADBG("Exit\n");
 	return NOTIFY_DONE;
 }
 
@@ -5815,6 +5827,7 @@ void ipa3_dec_client_disable_clks_delay_wq(
 		&ipa_dec_clients_disable_clks_on_suspend_irq_wq_work, delay))
 		IPAERR("Scheduling delayed work failed\n");
 }
+#ifndef CONFIG_DISABLE_IPA_WAKELOCKS
 /**
  * ipa3_inc_acquire_wakelock() - Increase active clients counter, and
  * acquire wakelock if necessary
@@ -5855,6 +5868,16 @@ void ipa3_dec_release_wakelock(void)
 		__pm_relax(ipa3_ctx->w_lock);
 	spin_unlock_irqrestore(&ipa3_ctx->wakelock_ref_cnt.spinlock, flags);
 }
+#else
+inline void ipa3_inc_acquire_wakelock(void)
+{
+	pr_debug("%s: Stub ipa wakelock fn\n", __func__);
+}
+inline void ipa3_dec_release_wakelock(void)
+{
+	pr_debug("%s: Stub ipa wakelock fn\n", __func__);
+}
+#endif
 
 int ipa3_set_clock_plan_from_pm(int idx)
 {
