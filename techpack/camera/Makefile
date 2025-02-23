@@ -18,7 +18,7 @@ ifeq ($(CONFIG_ARCH_MONACO), y)
 include $(srctree)/techpack/camera/config/monacocamera.conf
 endif
 
-ifeq ($(CONFIG_ARCH_LAHAINA), y)
+ifneq ($(filter y, $(CONFIG_ARCH_LAHAINA) $(CONFIG_ARCH_SHIMA) $(CONFIG_ARCH_YUPIK)),)
 include $(srctree)/techpack/camera/config/lahainacamera.conf
 endif
 
@@ -62,7 +62,7 @@ LINUXINCLUDE    += \
 		-include $(srctree)/techpack/camera/config/monacocameraconf.h
 endif
 
-ifeq ($(CONFIG_ARCH_LAHAINA), y)
+ifneq ($(filter y, $(CONFIG_ARCH_LAHAINA) $(CONFIG_ARCH_SHIMA) $(CONFIG_ARCH_YUPIK)),)
 LINUXINCLUDE    += \
 		-include $(srctree)/techpack/camera/config/lahainacameraconf.h
 endif
