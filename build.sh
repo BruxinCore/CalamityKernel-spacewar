@@ -33,7 +33,7 @@ echo -e "HOME directory is at $HOME_DIR\n"
 
 # Setup Toolchain dir
 if [ $TC_DIR ]; then
-    TC_DIR="/home/zero/work/LLVM19"
+    TC_DIR="$HOME_DIR/r383902b1"
 else
     TC_DIR="$HOME_DIR/tc"
 fi
@@ -50,7 +50,7 @@ AK3_DIR="$HOME/AnyKernel3"
 DEFCONFIG="lahaina-qgki_defconfig"
 
 MAKE_PARAMS="O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 \
-	CROSS_COMPILE=aarch64-linux-android-"
+	CROSS_COMPILE=$TC_DIR/bin/llvm-"
 
 export PATH="$CLANG_DIR/bin:$PATH"
 
