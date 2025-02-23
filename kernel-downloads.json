@@ -1,11 +1,11 @@
 {
   "kernel": {
     "date": "2025-02-23",
-    "name": "Unofficial NOS3.0 Spacewar Kernel v1.0",
+    "name": "Unofficial NOS3.0 Spacewar Kernel v1.1",
     "version": "5.4.274-1.0+",
     "link": "https://github.com/zerofrip/Spacewar_NOS3.0_Kernel/releases/latest/download/Uo_nos3.0_spacewar_kernel.zip",
     "changelog_url": "https://raw.githubusercontent.com/zerofrip/Spacewar_NOS3.0_Kernel/refs/heads/sm7325/v/mr/ChangeLog.txt",
-    "sha1": "4d7184e01ab4c8b0b18aa0447e214526812af17f"
+    "sha1": "4566ef143d10df304d9c22e44b41494491793677"
   },
   "support": {
     "link": "https://github.com/zerofrip/Spacewar_NOS3.0_Kernel/discussions"
