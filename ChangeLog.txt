@@ -1,0 +1,8 @@
+Unofficial NOS3.0 Spacewar Kernel v1.0
+
+Add
+KernelSU-Next
+susfs4ksu 1.5.5
+wireguard-linux-compat 1.0.20220627
+
+
