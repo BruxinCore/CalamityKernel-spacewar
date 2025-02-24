@@ -1,7 +1,7 @@
 # Unofficial NOS3.0 Spacewar Kernel
 
 # How to Use
-## When using booti.img
+## When using boot.img
 - Check the current version and
 - fastboot flash boot boot.img
 ## When using the kernel manager
