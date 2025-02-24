@@ -1,4 +1,4 @@
-# Unofficial DerpFest Spacewar Kernel
+# Unofficial NOS3.0 Spacewar Kernel
 
 # How to Use
 ## When using booti.img
