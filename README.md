@@ -9,10 +9,12 @@
 - wireguard-linux-compat 1.0.20220627 
 
 # Thanks for
+- tester
+ [⫷t⫸⫷u⫸⫷y⫸⫷i⫸⫷e⫸]
 - stock kernel
  [NothingOSS](https://github.com/NothingOSS/android_kernel_msm-5.4_nothing_sm7325/tree/sm7325/v/mr)
-- derpfest kernel
- [Davide](https://github.com/DaViDev985/kernel_nothing_sm7325)
+- base kernel
+  [Christian <kimo> B.](https://github.com/kimocoder/android_kernel_nothing_sm7325)
 - KernelSU-Next
  [rifsxd](https://github.com/rifsxd/KernelSU-Next)
 - susfs4ksu
