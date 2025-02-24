@@ -1,11 +1,5 @@
 Unofficial NOS3.0 Spacewar Kernel v1.0
 
-Bug fix
-
-
-
-Unofficial NOS3.0 Spacewar Kernel v1.0
-
 Add
 KernelSU-Next
 susfs4ksu 1.5.5
