@@ -5,7 +5,7 @@
 - Check the current version and
 - fastboot flash boot boot.img
 ## When using the Kernel Manager
-- Flash Uo_nos3.0_spacewar_kernel.zip with Kernel Manager
+- Flash Uo_Spacewar_NOS3.0_Kernel.zip with Kernel Manager
 
 # Supports updates from the [Franco Kernel Manager](https://play.google.com/store/apps/details?id=com.franco.kernel)
 - https://raw.githubusercontent.com/zerofrip/Spacewar_NOS3.0_Kernel/refs/heads/sm7325/v/mr/kernel-downloads.json
