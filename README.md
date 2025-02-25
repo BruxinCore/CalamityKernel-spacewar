@@ -28,3 +28,7 @@
  [simonpunk](https://gitlab.com/simonpunk/susfs4ksu/-/tree/kernel-5.4)
 - wireguard-linux-compat
  [Jason A. Donenfeld](https://github.com/WireGuard/wireguard-linux-compat)
+- Android_boot_image_editor
+ [cfig](https://github.com/cfig/Android_boot_image_editor)
+- AnyKernel3
+ [Chris Renshaw](https://github.com/osm0sis/AnyKernel3)
