@@ -20,8 +20,10 @@
  [⫷t⫸⫷u⫸⫷y⫸⫷i⫸⫷e⫸]
 - stock kernel
  [NothingOSS](https://github.com/NothingOSS/android_kernel_msm-5.4_nothing_sm7325/tree/sm7325/v/mr)
-- base kernel
-  [Christian <kimo> B.](https://github.com/kimocoder/android_kernel_nothing_sm7325)
+- Reference Kernel
+ [Christian <kimo> B.](https://github.com/kimocoder/android_kernel_nothing_sm7325)
+- Build Script
+ [Christian <kimo> B.](https://github.com/kimocoder/android_kernel_nothing_sm7325/blob/nethunter-stable/build.sh)
 - KernelSU-Next
  [rifsxd](https://github.com/rifsxd/KernelSU-Next)
 - susfs4ksu
