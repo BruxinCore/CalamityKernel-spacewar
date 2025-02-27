@@ -33,21 +33,18 @@ echo -e "HOME directory is at $HOME_DIR\n"
 
 # Setup Toolchain dir
 if [ $TC_DIR ]; then
-    TC_DIR="$HOME_DIR/r383902b1"
+     TC_DIR="$HOME_DIR/$TC_DIR"
 else
     TC_DIR="$HOME_DIR/tc"
 fi
 echo -e "Toolchain directory is at $TC_DIR\n"
 
 SECONDS=0 # builtin bash timer
-ZIPNAME="nethunter-spacewar-$(date '+%Y%m%d-%H%M').zip"
-if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
-   head=$(git rev-parse --verify HEAD 2>/dev/null); then
-        ZIPNAME="${ZIPNAME::-4}-$(echo $head | cut -c1-8).zip"
-fi
-CLANG_DIR="$TC_DIR"
+ZIPNAME="Uo_Spacewar_NOS3.0_Kernel.zip"
+
+CLANG_DIR="$TC_DIR/r383902b1"
 AK3_DIR="$HOME/AnyKernel3"
-DEFCONFIG="lahaina-qgki_defconfig"
+DEFCONFIG="spacewar_defconfig"
 
 MAKE_PARAMS="O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 \
 	CROSS_COMPILE=$TC_DIR/bin/llvm-"
@@ -83,22 +80,14 @@ if [ -f "$kernel" ] && [ -d "$dts_dir" ]; then
 	if [ -d "$AK3_DIR" ]; then
 		cp -r $AK3_DIR AnyKernel3
 		git checkout spacewar &> /dev/null
-	elif ! git clone https://github.com/kimocoder/AnyKernel3 -b spacewar; then
+	elif ! git clone https://github.com/zerofrip/AnyKernel3 -b spacewar_nos3.0; then
 		echo -e "\nAnyKernel3 repo not found locally and couldn't clone from GitHub! Aborting..."
 		exit 1
 	fi
 	cp $kernel AnyKernel3
 	cat $dts_dir/*.dtb > AnyKernel3/dtb
 	python3 scripts/mkdtboimg.py create AnyKernel3/dtbo.img --page_size=4096 $dts_dir/*.dtbo
-	mkdir AnyKernel3/modules/vendor/lib/modules/5.4.281-NetHunter/
-	#cp $(find out/net/* -name '*.ko') AnyKernel3/modules/vendor/lib/modules/5.4.281-NetHunter/
-	cp $(find out/drivers/* -name '*.ko') AnyKernel3/modules/vendor/lib/modules/5.4.281-NetHunter/
-	cp out/modules/lib/modules/5.4*/modules.{alias,dep,softdep} AnyKernel3/modules/vendor/lib/modules/5.4.281-NetHunter/
-	cp out/modules/lib/modules/5.4*/modules.order AnyKernel3/modules/vendor/lib/modules/5.4.281-NetHunter/modules.load
-	cp out/modules/lib/modules/5.4.*/modules.* AnyKernel3/modules/vendor/lib/modules/5.4.281-NetHunter/
-	sed -i 's/\(kernel\/[^: ]*\/\)\([^: ]*\.ko\)/\/vendor\/lib\/modules\/\2/g' AnyKernel3/modules/vendor/lib/modules/5.4.281-NetHunter/modules.dep
-	sed -i 's/.*\///g' AnyKernel3/modules/vendor/lib/modules/5.4.*/modules.load
-	rm -rf out/arch/arm64/boot out/modules
+	rm -rf out/arch/arm64/boot
 	cd AnyKernel3
 	zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder
 	cd ..
