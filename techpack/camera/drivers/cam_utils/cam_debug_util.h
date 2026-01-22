@@ -8,6 +8,8 @@
 
 #include <linux/platform_device.h>
 
+#define CAM_IS_NULL_TO_STR(ptr) ((ptr) ? "Non-NULL" : "NULL")
+
 /* Module IDs used for debug logging */
 #define CAM_CDM        (1 << 0)
 #define CAM_CORE       (1 << 1)

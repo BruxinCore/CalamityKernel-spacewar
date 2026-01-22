@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -855,6 +856,7 @@ static int cam_hw_cdm_arb_submit_bl(struct cam_hw_info *cdm_hw,
 			"CDM hw bl write failed tag=%d",
 			core->bl_fifo[fifo_idx].bl_tag -
 			1);
+			cam_mem_put_cpu_buf(cdm_cmd->cmd[i].bl_addr.mem_handle);
 			list_del_init(&node->entry);
 			kfree(node);
 			return -EIO;
@@ -866,11 +868,12 @@ static int cam_hw_cdm_arb_submit_bl(struct cam_hw_info *cdm_hw,
 			"CDM hw commit failed tag=%d",
 			core->bl_fifo[fifo_idx].bl_tag -
 			1);
+			cam_mem_put_cpu_buf(cdm_cmd->cmd[i].bl_addr.mem_handle);
 			list_del_init(&node->entry);
 			kfree(node);
 			return -EIO;
 	}
-
+	cam_mem_put_cpu_buf(cdm_cmd->cmd[i].bl_addr.mem_handle);
 	return 0;
 }
 
@@ -2227,7 +2230,7 @@ static int cam_hw_cdm_component_bind(struct device *dev,
 				sizeof(cdm_core->name));
 		snprintf(work_q_name + len, sizeof(work_q_name) - len, "%d", i);
 		cdm_core->bl_fifo[i].work_queue = alloc_workqueue(work_q_name,
-				WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS,
+				WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS | WQ_HIGHPRI,
 				CAM_CDM_INFLIGHT_WORKS);
 		if (!cdm_core->bl_fifo[i].work_queue) {
 			CAM_ERR(CAM_CDM,
