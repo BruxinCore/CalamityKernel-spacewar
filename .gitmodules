@@ -1,0 +1,4 @@
+[submodule "arch/arm64/boot/dts/vendor"]
+	path = arch/arm64/boot/dts/vendor
+	url = https://github.com/NothingOSS/android_kernel_devicetree_nothing_sm7325.git
+	branch = sm7325/v/mr
