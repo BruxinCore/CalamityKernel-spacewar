@@ -61,7 +61,7 @@ static int seq_show(struct seq_file *m, void *v)
 		
 	#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 	mnt = real_mount(file->f_path.mnt);
-	if (likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) &&
+	if (likely(susfs_is_current_proc_umounted()) &&
 			mnt->mnt_id >= DEFAULT_SUS_MNT_ID) {
 		struct path path;
 		char *pathname = kmalloc(PAGE_SIZE, GFP_KERNEL);
@@ -302,10 +302,16 @@ static int proc_readfd_common(struct file *file, struct dir_context *ctx,
 		data.fd = fd;
 
 		len = snprintf(name, sizeof(name), "%u", fd);
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		if (likely(susfs_is_current_proc_umounted())) {
+#endif
 		if (!proc_fill_cache(file, ctx,
 				     name, len, instantiate, p,
 				     &data))
 			goto out_fd_loop;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		}
+#endif
 		cond_resched();
 		rcu_read_lock();
 	}

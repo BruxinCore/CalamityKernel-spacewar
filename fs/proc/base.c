@@ -100,6 +100,11 @@
 #include "internal.h"
 #include "fd.h"
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+extern bool susfs_is_current_proc_umounted(void);
+extern bool susfs_is_inode_sus_path(struct inode *inode);
+#endif
+
 #include "../../lib/kstrtox.h"
 
 /* NOTE:
@@ -2040,10 +2045,25 @@ bool proc_fill_cache(struct file *file, struct dir_context *ctx,
 	struct dentry *child, *dir = file->f_path.dentry;
 	struct qstr qname = QSTR_INIT(name, len);
 	struct inode *inode;
-	unsigned type = DT_UNKNOWN;
-	ino_t ino = 1;
+	unsigned int type;
+	ino_t ino;
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (likely(susfs_is_current_proc_umounted())) {
+		child = d_hash_and_lookup(dir, &qname);
+		if (child) {
+			if (child->d_inode && susfs_is_inode_sus_path(child->d_inode)) {
+				dput(child);
+				return true;
+			}
+			/* Fall through and use child if it exists */
+		}
+	} else {
+		child = d_hash_and_lookup(dir, &qname);
+	}
+#else
 	child = d_hash_and_lookup(dir, &qname);
+#endif
 	if (!child) {
 		DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 		child = d_alloc_parallel(dir, &qname, &wq);

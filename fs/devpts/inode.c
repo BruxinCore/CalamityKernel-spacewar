@@ -596,8 +596,7 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
 	return dentry;
 }
 
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-extern bool ksu_devpts_hook;
+#ifdef CONFIG_KSU_SUSFS
 extern int ksu_handle_devpts(struct inode*);
 #endif
 
@@ -609,10 +608,12 @@ extern int ksu_handle_devpts(struct inode*);
  */
 void *devpts_get_priv(struct dentry *dentry)
 {
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-	if (likely(ksu_devpts_hook)) {
-		ksu_handle_devpts(dentry->d_inode);
+#ifdef CONFIG_KSU_SUSFS
+	if (likely(susfs_is_current_proc_umounted())) {
+		goto orig_flow;
 	}
+	ksu_handle_devpts(dentry->d_inode);
+orig_flow:
 #endif
 
 	if (dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC)
