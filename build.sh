@@ -41,6 +41,14 @@ CLANG_DIR="$TC_DIR/r383902b1"
 AK3_DIR="$HOME_DIR/AnyKernel3"
 DEFCONFIG="spacewar_defconfig"
 
+# Read version info if exists
+if [ -f "VERSION" ]; then
+    VERSION=$(cat VERSION | tr -d '\n')
+    PATCHLEVEL=$(cat PATCHLEVEL 2>/dev/null | tr -d '\n' || echo "0")
+    KVER="-Spacewar-v${VERSION}.${PATCHLEVEL}"
+    echo -e "Detected Kernel Version: v${VERSION}.${PATCHLEVEL}\n"
+fi
+
 export PATH="$CLANG_DIR/bin:$PATH"
 
 # Enable ccache if available
@@ -64,6 +72,10 @@ MAKE_PARAMS=(
     LLVM_IAS=1
     CROSS_COMPILE="$CLANG_DIR/bin/llvm-"
 )
+
+if [ -n "$KVER" ]; then
+    MAKE_PARAMS+=(LOCALVERSION="$KVER")
+fi
 
 # Regenerate defconfig, if requested so
 if [ "$FLAG_REGEN_DEFCONFIG" = 'y' ]; then
