@@ -5,10 +5,10 @@
 #
 
 # --- Configuration & Dependency Check ---
-TC_DIR="../../tc"
+TC_DIR="${HOME}/tc"
 CLANG_DIR="$TC_DIR/r383902b1"
 BOOT_EDITOR_DIR="$TC_DIR/Android_boot_image_editor"
-AK3_DIR="../AnyKernel3"
+AK3_DIR="${HOME}/AnyKernel3"
 DEFCONFIG="spacewar_defconfig"
 
 # Warning messages for missing dependencies
@@ -35,24 +35,7 @@ fi
 SECONDS=0
 export PATH="$CLANG_DIR/bin:$PATH"
 
-# --- 1. Sync with NothingOSS Upstream ---
-echo "🔄 Checking for NothingOSS Upstream updates..."
-git remote add upstream https://github.com/NothingOSS/android_kernel_msm-5.4_nothing_sm7325.git 2>/dev/null
-git fetch upstream sm7325/v/mr
-
-if git diff --quiet HEAD upstream/sm7325/v/mr; then
-    echo "✅ No upstream changes detected."
-else
-    echo "🚀 Upstream changes detected! Cleaning and updating..."
-    # Preserve README.md, kernel-downloads.json, VERSION, PATCHLEVEL, ChangeLog.txt, and this script
-    find . -maxdepth 1 -not -name '.' -not -name '..' -not -name 'README.md' -not -name '.github' -not -name '.git' -not -name 'kernel-downloads.json' -not -name 'VERSION' -not -name 'PATCHLEVEL' -not -name 'ChangeLog.txt' -not -name 'UpdateAndRelease.sh' -not -name 'build.sh' -exec rm -rf {} +
-    
-    git add -A
-    git commit -m "chore: Local cleanup before upstream sync"
-    git merge upstream/sm7325/v/mr --no-edit --allow-unrelated-histories -X theirs
-fi
-
-# --- 2. Update KernelSU-Next & SUSFS ---
+# --- 1. Update KernelSU-Next & SUSFS ---
 echo "💉 Updating KernelSU-Next & SUSFS..."
 
 # Sync KernelSU-Next fork with upstream
@@ -74,6 +57,13 @@ popd > /dev/null
 # Update submodules to latest
 echo "📦 Updating submodules..."
 git submodule update --init --recursive
+if [ -f "KernelSU-Next-5.4-compat.patch" ]; then
+    echo "🩹 Applying 5.4 compatibility patch to KernelSU-Next..."
+    pushd KernelSU-Next > /dev/null
+    git reset --hard HEAD
+    patch -p1 < ../KernelSU-Next-5.4-compat.patch
+    popd > /dev/null
+fi
 
 # Download SUSFS headers/core
 git clone --depth 1 -b gki-android12-5.10 https://gitlab.com/simonpunk/susfs4ksu.git temp_susfs4ksu
@@ -89,12 +79,12 @@ python3 -c '
 file_path = "fs/susfs.c"
 with open(file_path, "r") as f:
     text = f.read()
-legacy_ops = """static const struct fsnotify_ops susfs_fsnotify_ops = {
+legacy_ops = """static const struct fsnotify_ops fsnotify_ops = {
 	.handle_inode_event = susfs_handle_sdcard_inode_event,
 };"""
 compat_wrapper = """#include <linux/version.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
-static const struct fsnotify_ops susfs_fsnotify_ops = {
+static const struct fsnotify_ops fsnotify_ops = {
 	.handle_inode_event = susfs_handle_sdcard_inode_event,
 };
 #else
@@ -102,7 +92,7 @@ static int susfs_handle_sdcard_event_compat(struct fsnotify_group *group, struct
 {
     return susfs_handle_sdcard_inode_event(NULL, mask, inode, NULL, file_name, cookie);
 }
-static const struct fsnotify_ops susfs_fsnotify_ops = {
+static const struct fsnotify_ops fsnotify_ops = {
 	.handle_event = susfs_handle_sdcard_event_compat,
 };
 #endif"""
@@ -113,21 +103,7 @@ if legacy_ops in text:
     print("Successfully injected 5.4 compat wrapper into susfs.c")
 '
 
-# Patch su_mount_ns.c
-python3 -c '
-import os
-file_path = "drivers/kernelsu/su_mount_ns.c"
-if os.path.exists(file_path):
-    with open(file_path, "r") as f:
-        text = f.read()
-    if "path_mount" in text and "ksys_mount" not in text:
-        text = text.replace("path_mount", "ksys_mount")
-        with open(file_path, "w") as f:
-            f.write(text)
-        print("Successfully patched su_mount_ns.c")
-'
-
-# --- 3. Build Kernel ---
+# --- 2. Build Kernel ---
 echo "🏗 Starting Kernel Build..."
 
 # Read version info
@@ -163,7 +139,7 @@ mkdir -p out
 make "${MAKE_PARAMS[@]}" "$DEFCONFIG"
 make -j$(nproc --all) "${MAKE_PARAMS[@]}" || { echo "❌ Build Failed!"; exit 1; }
 
-# --- 4. Repack boot.img ---
+# --- 3. Repack boot.img ---
 echo "📦 Repacking boot.img..."
 # Fetch latest Spacewar stock boot.img
 echo "🔍 Searching for latest Spacewar boot image..."
@@ -206,7 +182,7 @@ cp ../../Spacewar_NOS3.0_Kernel/out/arch/arm64/boot/Image build/unzip_boot/kerne
 cp boot.img.signed ../../Spacewar_NOS3.0_Kernel/boot.img
 popd > /dev/null
 
-# --- 5. Finalize ---
+# --- 4. Finalize ---
 DATE=$(date +'%Y%m%d%H%M')
 DATE_DISPLAY=$(date +'%Y-%m-%d %H:%M')
 ZIP_NAME="Uo_Spacewar_NOS3.0_Kernel_${FULL_VERSION}_${DATE}.zip"
@@ -225,7 +201,7 @@ zip -r9 "../$ZIP_NAME" ./* -x .git README.md '*placeholder*'
 cd ..
 
 # Update ChangeLog.txt
-echo -e "Unofficial NOS3.0 Spacewar Kernel ${FULL_VERSION}\nDate: ${DATE_DISPLAY}\n- Automated build with latest Upstream Sync\n- Updated KernelSU-Next & SUSFS v2.0.0\n\n$(cat ChangeLog.txt)" > ChangeLog.txt
+echo -e "Unofficial NOS3.0 Spacewar Kernel ${FULL_VERSION}\nDate: ${DATE_DISPLAY}\n- Automated build\n- Updated KernelSU-Next & SUSFS v2.0.0\n\n$(cat ChangeLog.txt)" > ChangeLog.txt
 
 # Update metadata JSON
 ZIP_SHA1=$(sha1sum "$ZIP_NAME" | awk '{print $1}')
