@@ -597,6 +597,7 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
 }
 
 #ifdef CONFIG_KSU_SUSFS
+extern bool susfs_is_current_proc_umounted(void);
 extern int ksu_handle_devpts(struct inode*);
 #endif
 
