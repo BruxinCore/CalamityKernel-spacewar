@@ -33,6 +33,10 @@
 #include <linux/dnotify.h>
 #include <linux/compat.h>
 
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif
+
 #include "internal.h"
 
 int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,

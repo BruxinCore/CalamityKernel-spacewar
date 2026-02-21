@@ -451,6 +451,9 @@ struct compat_readdir_callback {
 	struct dir_context ctx;
 	struct compat_old_linux_dirent __user *dirent;
 	int result;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	struct super_block *sb;
+#endif
 };
 
 static int compat_fillonedir(struct dir_context *ctx, const char *name,
@@ -509,7 +512,10 @@ COMPAT_SYSCALL_DEFINE3(old_readdir, unsigned int, fd,
 	struct fd f = fdget_pos(fd);
 	struct compat_readdir_callback buf = {
 		.ctx.actor = compat_fillonedir,
-		.dirent = dirent
+		.dirent = dirent,
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		.sb = f.file->f_path.dentry->d_sb,
+#endif
 	};
 
 	if (!f.file)
@@ -536,6 +542,9 @@ struct compat_getdents_callback {
 	struct compat_linux_dirent __user *previous;
 	int count;
 	int error;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	struct super_block *sb;
+#endif
 };
 
 static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
@@ -614,6 +623,10 @@ COMPAT_SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	f = fdget_pos(fd);
 	if (!f.file)
 		return -EBADF;
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	buf.sb = f.file->f_path.dentry->d_sb;
+#endif
 
 	error = iterate_dir(f.file, &buf.ctx);
 	if (error >= 0)

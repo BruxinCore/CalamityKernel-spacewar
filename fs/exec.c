@@ -52,6 +52,9 @@
 #include <linux/mount.h>
 #include <linux/security.h>
 #include <linux/syscalls.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif
 #include <linux/tsacct_kern.h>
 #include <linux/cn_proc.h>
 #include <linux/audit.h>

@@ -102,7 +102,9 @@ if [ -f "$kernel" ] && [ -d "$dts_dir" ]; then
 	fi
 	cp "$kernel" AnyKernel3/
 	cat "$dts_dir"/*.dtb > AnyKernel3/dtb
-	python3 scripts/mkdtboimg.py create AnyKernel3/dtbo.img --page_size=4096 "$dts_dir"/*.dtbo
+	if ls "$dts_dir"/*.dtbo >/dev/null 2>&1; then
+		python3 scripts/mkdtboimg.py create AnyKernel3/dtbo.img --page_size=4096 "$dts_dir"/*.dtbo
+	fi
 	rm -rf out/arch/arm64/boot
 	cd AnyKernel3 || exit 1
 	zip -r9 "../$ZIPNAME" ./* -x .git README.md '*placeholder*'

@@ -97,11 +97,13 @@
 #include <linux/posix-timers.h>
 #include <linux/cpufreq_times.h>
 #include <trace/events/oom.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif
 #include "internal.h"
 #include "fd.h"
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-extern bool susfs_is_current_proc_umounted(void);
 extern bool susfs_is_inode_sus_path(struct inode *inode);
 #endif
 
