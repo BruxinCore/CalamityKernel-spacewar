@@ -54,11 +54,26 @@ fi
 
 # --- 2. Update KernelSU-Next & SUSFS ---
 echo "💉 Updating KernelSU-Next & SUSFS..."
+
+# Sync KernelSU-Next fork with upstream
+echo "🔄 Syncing KernelSU-Next fork with upstream..."
+pushd KernelSU-Next > /dev/null
+git remote add upstream https://github.com/KernelSU-Next/KernelSU-Next.git 2>/dev/null
+git fetch upstream dev_susfs
+
+if git diff --quiet HEAD upstream/dev_susfs; then
+    echo "✅ KernelSU-Next fork is up to date with upstream."
+else
+    echo "🚀 KernelSU-Next upstream updates detected! Merging into fork..."
+    git checkout dev_susfs
+    git merge upstream/dev_susfs --no-edit
+    git push origin dev_susfs
+fi
+popd > /dev/null
+
+# Update submodules to latest
+echo "📦 Updating submodules..."
 git submodule update --init --recursive
-cd KernelSU-Next
-git checkout dev_susfs
-git pull origin dev_susfs
-cd ..
 
 # Download SUSFS headers/core
 git clone --depth 1 -b gki-android12-5.10 https://gitlab.com/simonpunk/susfs4ksu.git temp_susfs4ksu
