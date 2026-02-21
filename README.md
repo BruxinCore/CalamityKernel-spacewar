@@ -1,6 +1,5 @@
 # 🌌 Unofficial NOS 3.0 Spacewar Kernel
 
-![Build Status](https://img.shields.io/github/actions/workflow/status/zerofrip/Spacewar_NOS3.0_Kernel/update_susfs.yml?branch=sm7325/v/mr&label=Build&style=for-the-badge)
 ![KernelSU-Next](https://img.shields.io/badge/KernelSU--Next-Integrated-blueviolet?style=for-the-badge)
 ![SUSFS](https://img.shields.io/badge/SUSFS-v2.0.0-orange?style=for-the-badge)
 
@@ -13,7 +12,7 @@ An unofficial NOS 3.0 kernel for Nothing Phone (1) (**spacewar**), featuring the
 - **KernelSU-Next**: Integrated with the latest `dev_susfs` branch from [rifsxd](https://github.com/rifsxd/KernelSU-Next).
 - **SUSFS v2.0.0**: Optimized for the 5.4 kernel. Supports advanced directory, mount, and kstat hiding.
 - **WireGuard**: Built-in `wireguard-linux-compat` for high-performance, secure networking.
-- **CI/CD Automation**: Automatically checks for NothingOSS upstream updates monthly, re-patches, builds, and releases.
+- **Automated Workflow**: A unified script to sync with NothingOSS upstream, update patches, build, and repack `boot.img`.
 
 ---
 
@@ -28,6 +27,38 @@ fastboot flash boot boot.img
 
 ### 2. Using Kernel Managers
 Download `Uo_Spacewar_NOS3.0_Kernel_*.zip` from [Releases](https://github.com/zerofrip/Spacewar_NOS3.0_Kernel/releases) and flash it using your preferred Kernel Manager (e.g., Franco Kernel Manager, SmartPack).
+
+---
+
+## 🏗 Local Build & Update (For Forked Repos)
+
+Since GitHub Actions are unavailable on forked repositories, use the provided `UpdateAndRelease.sh` script to automate your build process.
+
+### Prerequisites
+
+Ensure the following tools are present in your `tc/` directory (located one level above the kernel root):
+
+1. **Clang Toolchain (r383902b1)**:
+   - Download: [Google Clang prebuilts](https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+/refs/heads/master/clang-r383902b1/)
+   - Placement: `tc/r383902b1`
+
+2. **Android Boot Image Editor**:
+   - Clone: `git clone https://github.com/cfig/Android_boot_image_editor.git`
+   - Placement: `tc/Android_boot_image_editor`
+
+### Running the Script
+
+```bash
+chmod +x UpdateAndRelease.sh
+./UpdateAndRelease.sh
+```
+
+This script will:
+- Sync with NothingOSS upstream (`sm7325/v/mr`).
+- Update KernelSU-Next and SUSFS components.
+- Automatically track and download the latest stock boot image from `nothing_archive`.
+- Build the kernel and repack the `boot.img` automatically.
+- Update `ChangeLog.txt` and `kernel-downloads.json` with new version info.
 
 ---
 
