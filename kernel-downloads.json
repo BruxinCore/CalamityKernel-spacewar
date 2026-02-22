@@ -5,7 +5,7 @@
     "version": "5.4.289-v1.0.0",
     "link": "https://github.com/zerofrip/Spacewar_NOS3.0_Kernel/releases/latest/download/Uo_Spacewar_NOS3.0_Kernel.zip",
     "changelog_url": "https://raw.githubusercontent.com/zerofrip/Spacewar_NOS3.0_Kernel/refs/heads/sm7325/v/mr/ChangeLog.txt",
-    "sha1": "c519f41ec0132ced65cee1406d59e67e28761349"
+    "sha1": "36b87f50a6d52a3e44fee559cee4054ce42689d7"
   },
   "support": {
     "link": "https://github.com/zerofrip/Spacewar_NOS3.0_Kernel/discussions"
