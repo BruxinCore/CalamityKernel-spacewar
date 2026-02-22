@@ -32,6 +32,7 @@ if [ ! -f "Kbuild" ]; then
     exit 1
 fi
 
+KERNEL_ROOT=$(pwd)
 SECONDS=0
 export PATH="$CLANG_DIR/bin:$PATH"
 
@@ -180,9 +181,9 @@ fi
 cp boot.img "$BOOT_EDITOR_DIR/"
 pushd "$BOOT_EDITOR_DIR" > /dev/null
 ./gradlew unpack
-cp ../../Spacewar_NOS3.0_Kernel/out/arch/arm64/boot/Image build/unzip_boot/kernel
+cp "$KERNEL_ROOT"/out/arch/arm64/boot/Image build/unzip_boot/kernel
 ./gradlew pack
-[ -f boot.img.signed ] && cp boot.img.signed ../../Spacewar_NOS3.0_Kernel/boot.img || cp boot.img.out ../../Spacewar_NOS3.0_Kernel/boot.img 2>/dev/null || cp boot.img ../../Spacewar_NOS3.0_Kernel/boot.img
+[ -f boot.img.signed ] && cp boot.img.signed "$KERNEL_ROOT"/boot.img || cp boot.img.out "$KERNEL_ROOT"/boot.img 2>/dev/null || cp boot.img "$KERNEL_ROOT"/boot.img
 popd > /dev/null
 
 # --- 4. Finalize ---
