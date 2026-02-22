@@ -135,7 +135,7 @@ MAKE_PARAMS=(
     LLVM=1
     LLVM_IAS=1
     CROSS_COMPILE="$CLANG_DIR/bin/llvm-"
-    LOCALVERSION="$KVER"
+    LOCALVERSION="-qgki"
 )
 
 mkdir -p out
@@ -182,7 +182,7 @@ pushd "$BOOT_EDITOR_DIR" > /dev/null
 ./gradlew unpack
 cp ../../Spacewar_NOS3.0_Kernel/out/arch/arm64/boot/Image build/unzip_boot/kernel
 ./gradlew pack
-cp boot.img.signed ../../Spacewar_NOS3.0_Kernel/boot.img
+[ -f boot.img.signed ] && cp boot.img.signed ../../Spacewar_NOS3.0_Kernel/boot.img || cp boot.img.out ../../Spacewar_NOS3.0_Kernel/boot.img 2>/dev/null || cp boot.img ../../Spacewar_NOS3.0_Kernel/boot.img
 popd > /dev/null
 
 # --- 4. Finalize ---
