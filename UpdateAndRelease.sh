@@ -168,7 +168,7 @@ if [ ! -f "image-boot.7z" ] || [ ! -s "image-boot.7z" ]; then
 fi
 
 if [ -f "image-boot.7z" ]; then
-    7z x image-boot.7z
+    7z x -y image-boot.7z
     find . -name "boot.img" -exec mv {} ./boot.img \;
     rm image-boot.7z
 else

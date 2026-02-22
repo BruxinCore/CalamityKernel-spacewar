@@ -3032,9 +3032,6 @@ static int may_delete(struct inode *dir, struct dentry *victim, bool isdir)
  */
 static inline int may_create(struct inode *dir, struct dentry *child)
 {
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	int error;
-#endif
 	struct user_namespace *s_user_ns;
 	audit_inode_child(dir, child, AUDIT_TYPE_CHILD_CREATE);
 	if (child->d_inode)

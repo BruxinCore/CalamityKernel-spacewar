@@ -2047,8 +2047,8 @@ bool proc_fill_cache(struct file *file, struct dir_context *ctx,
 	struct dentry *child, *dir = file->f_path.dentry;
 	struct qstr qname = QSTR_INIT(name, len);
 	struct inode *inode;
-	unsigned int type;
-	ino_t ino;
+	unsigned int type = DT_UNKNOWN;
+	ino_t ino = 1;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 	if (likely(susfs_is_current_proc_umounted())) {
