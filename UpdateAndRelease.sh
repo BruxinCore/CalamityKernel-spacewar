@@ -60,6 +60,7 @@ popd > /dev/null
 # Update submodules to latest
 echo "📦 Updating submodules..."
 git submodule update --init --recursive
+
 if [ -f "KernelSU-Next-5.4-compat.patch" ]; then
     echo "🩹 Applying 5.4 compatibility patch to KernelSU-Next..."
     pushd KernelSU-Next > /dev/null
@@ -67,6 +68,10 @@ if [ -f "KernelSU-Next-5.4-compat.patch" ]; then
     patch --forward -p1 < ../KernelSU-Next-5.4-compat.patch || true
     popd > /dev/null
 fi
+
+# Bypass KernelSU-Next v2 signature check
+echo "🔓 Bypassing KernelSU-Next v2 signature check..."
+sed -i 's/return check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH);/return true;/g' KernelSU-Next/kernel/apk_sign.c
 
 # Download SUSFS headers/core
 git clone --depth 1 -b gki-android12-5.10 https://gitlab.com/simonpunk/susfs4ksu.git temp_susfs4ksu
