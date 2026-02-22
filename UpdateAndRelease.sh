@@ -63,7 +63,7 @@ if [ -f "KernelSU-Next-5.4-compat.patch" ]; then
     echo "🩹 Applying 5.4 compatibility patch to KernelSU-Next..."
     pushd KernelSU-Next > /dev/null
     git reset --hard HEAD
-    patch -p1 < ../KernelSU-Next-5.4-compat.patch
+    patch --forward -p1 < ../KernelSU-Next-5.4-compat.patch || true
     popd > /dev/null
 fi
 
