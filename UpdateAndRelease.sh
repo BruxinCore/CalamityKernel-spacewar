@@ -61,11 +61,11 @@ popd > /dev/null
 echo "📦 Updating submodules..."
 git submodule update --init --recursive
 
-if [ -f "KernelSU-Next-5.4-compat.patch" ]; then
+if [ -f "KernelSU-Next-5.4-compat2.patch" ]; then
     echo "🩹 Applying 5.4 compatibility patch to KernelSU-Next..."
     pushd KernelSU-Next > /dev/null
     git reset --hard HEAD
-    patch --forward -p1 < ../KernelSU-Next-5.4-compat.patch || true
+    patch --forward -p1 < ../KernelSU-Next-5.4-compat2.patch || true
     popd > /dev/null
 fi
 
