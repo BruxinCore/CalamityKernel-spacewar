@@ -41,6 +41,8 @@ echo "💉 Updating KernelSU-Next & SUSFS..."
 # Sync KernelSU-Next fork with upstream
 echo "🔄 Syncing KernelSU-Next fork with upstream..."
 pushd KernelSU-Next > /dev/null
+git reset --hard HEAD
+git clean -fd
 git remote add upstream https://github.com/KernelSU-Next/KernelSU-Next.git 2>/dev/null
 git fetch upstream dev_susfs
 
@@ -98,6 +100,7 @@ static const struct fsnotify_ops fsnotify_ops = {
 #endif"""
 if legacy_ops in text:
     text = text.replace(legacy_ops, compat_wrapper)
+    text = text.replace("extern bool susfs_is_avc_log_spoofing_enabled;", "bool susfs_is_avc_log_spoofing_enabled = false;")
     with open(file_path, "w") as f:
         f.write(text)
     print("Successfully injected 5.4 compat wrapper into susfs.c")
