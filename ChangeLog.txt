@@ -1,8 +1,11 @@
+Unofficial NOS3.0 Spacewar Kernel v1.0.0
+Date: 2026-02-22 09:35
+- Automated build
+- Updated KernelSU-Next & SUSFS v2.0.0
+
 Unofficial NOS3.0 Spacewar Kernel v1.0
 
 Add
 KernelSU-Next
 susfs4ksu 1.5.5
 wireguard-linux-compat 1.0.20220627
-
-
