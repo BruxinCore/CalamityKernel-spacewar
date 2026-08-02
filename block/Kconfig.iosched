@@ -46,3 +46,9 @@ config BFQ_CGROUP_DEBUG
 endmenu
 
 endif
+
+config IOSCHED_SSG
+	tristate "Samsung SSG I/O scheduler"
+	default y
+	---help---
+	  The Samsung Generic I/O scheduler.
