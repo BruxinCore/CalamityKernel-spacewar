@@ -51,12 +51,12 @@ static struct work_struct input_boost_work;
 
 static bool input_boost_enabled;
 
-static unsigned int input_boost_ms = 40;
+static unsigned int input_boost_ms = 120;
 show_one(input_boost_ms);
 store_one(input_boost_ms);
 cpu_boost_attr_rw(input_boost_ms);
 
-static unsigned int sched_boost_on_input;
+static unsigned int sched_boost_on_input = 1;
 show_one(sched_boost_on_input);
 store_one(sched_boost_on_input);
 cpu_boost_attr_rw(sched_boost_on_input);
