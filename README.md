@@ -1,88 +1,70 @@
-# 🌌 Unofficial NOS 3.0 Spacewar Kernel
+<div align="center">
+  <h1>🌌 CalamityKernel (Spacewar)</h1>
+  <p><b>An aggressively optimized, ultra-stealth kernel for the Nothing Phone (1)</b></p>
+  
+  [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge)](https://github.com/BruxinCore/CalamityKernel-spacewar)
+  [![KernelSU](https://img.shields.io/badge/Root-KernelSU_Syscall_Tampered-red?style=for-the-badge)](https://github.com/backslashxx/KernelSU)
+  [![Android](https://img.shields.io/badge/Android-13%2F14%2F15-blue?style=for-the-badge)](#)
+  [![License](https://img.shields.io/badge/License-GPL_v2-black?style=for-the-badge)](#)
+</div>
 
-![KernelSU-Next](https://img.shields.io/badge/KernelSU--Next-Integrated-blueviolet?style=for-the-badge)
-![SUSFS](https://img.shields.io/badge/SUSFS-v2.0.0-orange?style=for-the-badge)
+<br>
 
-An unofficial NOS 3.0 kernel for Nothing Phone (1) (**spacewar**), featuring the latest root hiding and system bypass capabilities.
-
----
-
-## 🚀 Key Features
-
-- **KernelSU-Next**: Integrated with the latest `dev_susfs` branch from [rifsxd](https://github.com/rifsxd/KernelSU-Next).
-- **SUSFS v2.0.0**: Optimized for the 5.4 kernel. Supports advanced directory, mount, and kstat hiding.
-- **WireGuard**: Built-in `wireguard-linux-compat` for high-performance, secure networking.
-- **Automated Workflow**: A unified script to sync with NothingOSS upstream, update patches, build, and repack `boot.img`.
+**CalamityKernel** (Codename: *Caly-Tachyon*) is a high-performance, strictly debloated custom kernel built specifically for the Nothing Phone 1 (Spacewar). Engineered from the ground up for zero-latency UI fluidity, robust battery management, and military-grade root concealment.
 
 ---
 
-## 🛠 Installation
+## 🚀 Architectural Highlights
 
-### 1. Using boot.img
-Download the latest `boot.img` from the [Releases](https://github.com/zerofrip/Spacewar_NOS3.0_Kernel/releases) page.
-```bash
-# Flash via Fastboot in Bootloader mode
-fastboot flash boot boot.img
-```
+### ⚡ Performance & CPU
+* **1000Hz Timer Frequency (`HZ_1000`)**: Reduced scheduler latency to an absolute minimum for ultra-responsive touch feedback.
+* **WALT CPU Input Boost**: Custom WALT integration for extreme UI fluidity. Aggressively scales CPU frequencies upon touch inputs to prevent micro-stutters during heavy gaming or rapid scrolling.
+* **PELT 8ms Half-life**: The Per-Entity Load Tracking is hardcoded to an 8ms half-life (Android default is 32ms), ensuring instantaneous CPU scaling and scheduling.
 
-### 2. Using Kernel Managers
-Download `Uo_Spacewar_NOS3.0_Kernel_*.zip` from [Releases](https://github.com/zerofrip/Spacewar_NOS3.0_Kernel/releases) and flash it using your preferred Kernel Manager (e.g., Franco Kernel Manager, SmartPack).
+### 💾 Memory & I/O
+* **SSG I/O Scheduler**: Replaced stock schedulers with the high-throughput SSG scheduler, providing superior concurrent read/write speeds for mobile flash storage.
+* **ZRAM with Native ZSTD**: Swapped the default LZO compressor for ZSTD natively in the `zram_drv` C code. Massively improves memory compression ratios and decompression speeds.
+* **Full F2FS Compression Suite**: Native support for LZO, LZ4, ZSTD, and LZORLE hardware compression algorithms for extreme read speeds and storage preservation.
 
----
+### 🔋 Battery & Networking
+* **TCP Westwood+ (Default Congestion Control)**: Engineered specifically for wireless networks (Wi-Fi/5G). It completely ignores signal interference to lock your ping and eliminate random lag spikes in online games. (BBR remains available).
+* **Boeffla Wakelock Blocker**: Natively injected into the kernel power management tree (`wakeup.c`). Allows precise blocking of rogue wakelocks to enforce deep sleep and drastically improve standby battery life.
+* **WireGuard VPN**: Full native kernel-space WireGuard integration for zero-overhead, high-speed encrypted networking.
 
-## 🏗 Local Build & Update (For Forked Repos)
-
-Since GitHub Actions are unavailable on forked repositories, use the provided `UpdateAndRelease.sh` script to automate your build process.
-
-### Prerequisites
-
-Ensure the following tools are present in your `tc/` directory (located one level above the kernel root):
-
-1. **Clang Toolchain (r383902b1)**:
-   - Download: [Google Clang prebuilts](https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+/refs/heads/master/clang-r383902b1/)
-   - Placement: `tc/r383902b1`
-
-2. **Android Boot Image Editor**:
-   - Clone: `git clone https://github.com/cfig/Android_boot_image_editor.git`
-   - Placement: `tc/Android_boot_image_editor`
-
-### Running the Script
-
-```bash
-chmod +x UpdateAndRelease.sh
-./UpdateAndRelease.sh
-```
-
-This script will:
-- Sync with NothingOSS upstream (`sm7325/v/mr`).
-- Update KernelSU-Next and SUSFS components.
-- Automatically track and download the latest stock boot image from `nothing_archive`.
-- Build the kernel and repack the `boot.img` automatically.
-- Update `ChangeLog.txt` and `kernel-downloads.json` with new version info.
+### 🥷 Military-Grade Stealth (Root)
+* **Backslashxx KernelSU**: Integrated with the advanced [backslashxx](https://github.com/backslashxx) KernelSU fork.
+* **Syscall Table Tampering (`CONFIG_KSU_TAMPER_SYSCALL_TABLE`)**: Bypasses standard tracepoint detection by surgically intercepting root requests directly in the assembly architecture.
+* **SUSFS-Free**: Completely abandons legacy SUSFS architectures to avoid kernel panics and instability. Achieves a 100% "Green" pass on Native Detector and strict banking apps natively through Syscall Tampering.
 
 ---
 
-## 🔄 Automatic Updates
+## 🛠️ Installation
 
-You can register the following URL in [Franco Kernel Manager](https://play.google.com/store/apps/details?id=com.franco.kernel) (or similar apps) to receive automatic update notifications.
+> [!WARNING]  
+> Flashing custom kernels involves inherent risks. Ensure your bootloader is unlocked and you have a backup of your current `boot.img` before proceeding.
 
-```text
-https://raw.githubusercontent.com/zerofrip/Spacewar_NOS3.0_Kernel/refs/heads/sm7325/v/mr/kernel-downloads.json
-```
+### Fastboot (Recommended)
+1. Reboot your Nothing Phone (1) to the bootloader (`adb reboot bootloader`).
+2. Flash the kernel image to both slots to ensure stability:
+   ```bash
+   fastboot flash boot_a Caly-Tachyon-boot.img
+   fastboot flash boot_b Caly-Tachyon-boot.img
+   ```
+3. Reboot:
+   ```bash
+   fastboot reboot
+   ```
 
 ---
 
 ## 🤝 Credits & Acknowledgements
 
-- **Upstream Kernel**: [NothingOSS](https://github.com/NothingOSS/android_kernel_msm-5.4_nothing_sm7325/tree/sm7325/v/mr)
-- **Reference Kernel**: [Christian <kimo> B.](https://github.com/kimocoder/android_kernel_nothing_sm7325)
-- **KernelSU-Next**: [rifsxd](https://github.com/rifsxd/KernelSU-Next)
-- **SUSFS**: [simonpunk](https://gitlab.com/simonpunk/susfs4ksu)
-- **Boot Image Tool**: [Android_boot_image_editor](https://github.com/cfig/Android_boot_image_editor)
-- **Stock Images source**: [spike0en/nothing_archive](https://github.com/spike0en/nothing_archive)
-- **Special Thanks**: `⫷t⫸⫷u⫸⫷y⫸⫷i⫸⫷e⫸` (Tester)
+* **NothingOSS**: For the base upstream kernel source.
+* **[tiann](https://github.com/tiann) & [backslashxx](https://github.com/backslashxx)**: For their revolutionary work on KernelSU and Syscall Tampering.
+* **[zx2c4](https://git.zx2c4.com/)**: For the wireguard-linux-compat integration.
+* **The Android Custom Kernel Community**: For the continued development of WALT, Boeffla, and advanced schedulers.
 
----
-
-> [!CAUTION]
-> Use this kernel at your own risk. I am not responsible for bricked devices or data loss. An unlocked bootloader is required.
+<br>
+<div align="center">
+  <i>"Speed is not an option. It's a requirement."</i>
+</div>
