@@ -1207,6 +1207,70 @@ static ssize_t aw210xx_setting_br_show(struct device *dev,
 	return sprintf(buf, "%d\n", aw210xx->setting_br);
 }
 
+static int aw210xx_glyph_overdrive_state = 0;
+static uint32_t aw210xx_original_glo_current = 0;
+static uint16_t aw210xx_original_setting_br = 0;
+static uint32_t aw210xx_original_max_brightness = 0;
+
+static ssize_t aw210xx_glyph_overdrive_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", aw210xx_glyph_overdrive_state);
+}
+
+static ssize_t aw210xx_glyph_overdrive_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t len)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct aw210xx *aw210xx = container_of(led_cdev, struct aw210xx, cdev);
+	int rc;
+	unsigned int val = 0;
+
+	rc = kstrtouint(buf, 0, &val);
+	if (rc < 0)
+		return rc;
+
+	mutex_lock(&aw210xx->led_mutex);
+	if (val == 1 && !aw210xx_glyph_overdrive_state) {
+		/* Save defaults */
+		aw210xx_original_glo_current = aw210xx->glo_current;
+		aw210xx_original_setting_br = aw210xx->setting_br;
+		aw210xx_original_max_brightness = aw210xx->cdev.max_brightness;
+
+		/* Overdrive enabled: Maximize current and brightness */
+		aw210xx->glo_current = 255;
+		aw210xx->setting_br = 4095;
+		aw210xx->cdev.max_brightness = 4095;
+		aw210xx_global_set(aw210xx);
+
+		aw210xx_glyph_overdrive_state = 1;
+		AW_INFO("Glyph Overdrive ENABLED!\n");
+	} else if (val == 0 && aw210xx_glyph_overdrive_state) {
+		/* Restore defaults */
+		if (aw210xx_original_glo_current > 0)
+			aw210xx->glo_current = aw210xx_original_glo_current;
+		else
+			aw210xx->glo_current = 160;
+
+		if (aw210xx_original_setting_br > 0)
+			aw210xx->setting_br = aw210xx_original_setting_br;
+		else
+			aw210xx->setting_br = 2625;
+
+		if (aw210xx_original_max_brightness > 0)
+			aw210xx->cdev.max_brightness = aw210xx_original_max_brightness;
+		
+		aw210xx_global_set(aw210xx);
+
+		aw210xx_glyph_overdrive_state = 0;
+		AW_INFO("Glyph Overdrive DISABLED.\n");
+	}
+	mutex_unlock(&aw210xx->led_mutex);
+
+	return len;
+}
+
 static ssize_t aw210xx_single_led_br_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t len)
@@ -2124,6 +2188,7 @@ static DEVICE_ATTR(reg, 0664, aw210xx_reg_show, aw210xx_reg_store);
 static DEVICE_ATTR(hwen, 0664, aw210xx_hwen_show, aw210xx_hwen_store);
 static DEVICE_ATTR(glo_current, 0664, aw210xx_glo_current_show, aw210xx_glo_current_store);
 static DEVICE_ATTR(setting_br, 0664, aw210xx_setting_br_show, aw210xx_setting_br_store);
+static DEVICE_ATTR(glyph_overdrive, 0664, aw210xx_glyph_overdrive_show, aw210xx_glyph_overdrive_store);
 static DEVICE_ATTR(single_led_br,0220, NULL, aw210xx_single_led_br_store);
 static DEVICE_ATTR(rear_cam_led_br, 0664, aw210xx_rear_cam_led_br_show, aw210xx_rear_cam_led_br_store);
 static DEVICE_ATTR(front_cam_led_br, 0664, aw210xx_front_cam_led_br_show, aw210xx_front_cam_led_br_store);
@@ -2161,6 +2226,7 @@ static struct attribute *aw210xx_attributes[] = {
 	&dev_attr_hwen.attr,
 	&dev_attr_glo_current.attr,
 	&dev_attr_setting_br.attr,
+	&dev_attr_glyph_overdrive.attr,
 	&dev_attr_single_led_br.attr,
 	&dev_attr_rear_cam_led_br.attr,
 	&dev_attr_front_cam_led_br.attr,
