@@ -997,6 +997,8 @@ static ssize_t comp_algorithm_store(struct device *dev,
 {
 	return len;
 
+	return len;
+
 	struct zram *zram = dev_to_zram(dev);
 	char compressor[ARRAY_SIZE(zram->compressor)];
 	size_t sz;
