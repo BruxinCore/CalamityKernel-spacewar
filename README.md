@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🌌 CalamityKernel (Spacewar)</h1>
+  <h1>CalamityKernel (Spacewar)</h1>
   <p><b>An aggressively optimized, ultra-stealth kernel for the Nothing Phone (1)</b></p>
   
   [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge)](https://github.com/BruxinCore/CalamityKernel-spacewar)
