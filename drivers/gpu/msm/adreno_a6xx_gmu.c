@@ -1800,8 +1800,12 @@ static int a6xx_gmu_dcvs_set(struct adreno_device *adreno_dev,
 			(gpu_pwrlevel >= table->gpu_level_num - 1))
 		return -EINVAL;
 
-	if (gpu_pwrlevel < table->gpu_level_num - 1)
+	if (gpu_pwrlevel < table->gpu_level_num - 1) {
 		req.freq = table->gpu_level_num - gpu_pwrlevel - 1;
+		if (req.freq >= table->gpu_level_num - 2) {
+			bus_level = pwr->ddr_table_count - 1;
+		}
+	}
 
 	if (bus_level < pwr->ddr_table_count && bus_level > 0)
 		req.bw = bus_level;
