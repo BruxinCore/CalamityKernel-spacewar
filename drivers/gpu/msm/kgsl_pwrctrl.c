@@ -1552,6 +1552,13 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 
 	init_waitqueue_head(&device->active_cnt_wq);
 
+	for (i = pwr->num_pwrlevels; i > 0; i--)
+		pwr->pwrlevels[i] = pwr->pwrlevels[i - 1];
+	
+	pwr->num_pwrlevels++;
+	pwr->pwrlevels[0].gpu_freq = 650000000;
+	pwr->default_pwrlevel++;
+
 	/* Initialize the user and thermal clock constraints */
 
 	pwr->max_pwrlevel = 0;
