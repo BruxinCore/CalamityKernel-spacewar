@@ -7,6 +7,10 @@ completion, HUP, INT or TERM. A reboot also returns these runtime nodes to their
 boot policies. SIGKILL cannot run cleanup: inspect the saved baseline output
 and restore the node, or reboot, before proceeding. A stale lock must be
 inspected before removing `/data/local/tmp/caly-perf-trial.lock` with `rmdir`.
+For early termination, send TERM to the exact shell PID recorded in
+`/data/local/tmp/caly-perf-trial.lock/pid`; avoid broad process-name matching.
+After a reboot/SIGKILL, confirm that the recorded PID is no longer the trial
+before deleting its `pid` file and removing the stale directory.
 
 1. `snapshot`: memory PSI, reclaim/ZRAM counters, LMKD properties, freezer
    policy, top-app clamps and cpufreq limits. An empty property or `null`
@@ -51,6 +55,28 @@ and `dumpsys activity exit-info` locally. Keep personal app/log details private.
 Do not restart LMKD, force freezer settings or increase cached-process limits
 without a baseline: those actions can introduce kills or memory pressure.
 The current reported boot-time ZRAM write failures remain unresolved.
+
+## Device check, 2026-10-10
+
+On Nothing OS 3.2 / Android 15 with the working Rice kernel and built-in KSU,
+both MGLRU masks (1 and 3) were accepted. Short launch/scroll/switch trials and
+a bounded memory-load trial completed without an observed reboot or full
+device freeze; original nodes were restored. This does not establish long-term
+stability. ZRAM failed_reads/failed_writes remained zero in this session.
+
+Measurements did not establish a consistent UI improvement. App reloads due
+to LOW_MEMORY occurred during MGLRU trials, and the memory probe reached
+different allocation sizes before its availability guard, so those runs are
+not equivalent performance comparisons. Keep MGLRU off by default.
+The top-app 10% clamp also did not establish a consistent improvement with
+the device's existing high CPU frequency floors; retain the original policy.
+
+The ROM already had active cached-app freezer/compaction and LMKD connections
+to memory PSI. A Binder freezer-related app exit was recorded before the
+MGLRU trials. It is an app reload lead, not proof of a system-wide freeze cause.
+Do not force freezer or LMKD changes merely because their property overrides
+are empty. Baseline cache-process limits were retained; no ROM restart, app
+data clearing, thermal bypass or persistent new tunable was performed.
 
 Primary references:
 - https://docs.kernel.org/admin-guide/mm/multigen_lru.html

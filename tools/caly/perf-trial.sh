@@ -36,12 +36,21 @@ snapshot() {
   printf '\n[cached app freezer policy]\n'
   settings get global cached_apps_freezer || true
   device_config get activity_manager_native_boot use_freezer || true
+  # The settings can be null while the ROM defaults enable the feature.
+  dumpsys activity settings | grep -E 'use_freezer=|use_compaction=|Apps frozen:|CUR_MAX_CACHED_PROCESSES=' || true
+  printf '\n[LMKD PSI connections]\n'
+  lmk_pid=$(pidof lmkd 2>/dev/null || true)
+  case "$lmk_pid" in
+    ''|*[!0-9]*) ;;
+    *) ls -l "/proc/$lmk_pid/fd" 2>/dev/null | grep '/proc/pressure/' || true;;
+  esac
   for root in /dev/cpuctl/top-app /sys/fs/cgroup/cpu/top-app; do
     read_node "$root/cpu.uclamp.min"
     read_node "$root/cpu.uclamp.max"
   done
   for policy in /sys/devices/system/cpu/cpufreq/policy*; do
     read_node "$policy/scaling_governor"
+    read_node "$policy/cpuinfo_min_freq"
     read_node "$policy/scaling_min_freq"
     read_node "$policy/scaling_max_freq"
     read_node "$policy/schedutil/up_rate_limit_us"
@@ -80,11 +89,13 @@ cleanup() {
       echo "ROM/another tuner changed $node; keeping its value: $current"
     fi
   fi
+  rm -f "$lock/pid" || rc=1
   rmdir "$lock" || rc=1
   exit "$rc"
 }
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
+printf '%s\n' "$$" > "$lock/pid"
 
 case "$mode" in
   mglru-core|mglru-walk)
