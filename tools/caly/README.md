@@ -97,8 +97,8 @@ frequency requests in `msm_performance`, retaining frequency maximums,
 thermal control, the CPU governor and input boost. The observed high floors
 were Qualcomm requests (not demonstrated to be FKM settings). Readback can
 remain high if a different client requests it; do not override that client.
-Both variants are unvalidated on hardware as of this commit: the USB device
-disconnected before these new tests could start. They remain candidates.
+Both variants were subsequently exercised on Spacewar / Nothing OS 3.2 with
+Rice and KSU UAPI 5. They remain beta candidates, not proven speedups.
 
 The Daily Profile v0.4 includes canonical `cpu-policy.sh` and a `cpu-mode`
 file. Valid choices are `legacy`, `responsive` and `balanced`. Packaged default
@@ -108,3 +108,29 @@ them before changing modes/on uninstall, skips values changed by another
 tuner and rejects restoration from a different boot. It serializes with the
 temporary trials. Disabling the module and rebooting restores ROM boot policy.
 There is no background loop fighting PowerHAL requests or a ZRAM/MGLRU change.
+
+### CPU comparison, 2026-10-10
+
+At 37-38 C battery temperature, the legacy, responsive and balanced modes
+completed sequential app launch/switch/bidirectional-scroll runs followed by
+three cold Settings launches and scroll samples per mode. No device freeze
+or reboot was observed; ZRAM failed reads/writes remained zero. The timed
+helpers restored top-app nodes and preserved frequency requests rewritten
+by the ROM. This cannot establish that the intermittent freeze is fixed.
+
+Settings cold-launch medians were 411 / 403 / 419 ms respectively. Frame-time
+p95 samples were 9,5,7 / 5,6,6 / 5,6,6 ms. Differences do not establish a
+consistent launch improvement. Social-app runs had different hot/cold states
+and content; WhatsApp produced too few frames for a useful scroll comparison.
+
+During the eight-second screen-on idle interval, balanced spent 92.7%, 94.5%
+and 91.7% of cpufreq residency below the previous little/big/prime floors;
+legacy and responsive spent 0%. This verifies lower idle frequencies during
+that interval, not battery savings or sustained behavior. The ROM rewrote
+msm_performance requests during the subsequent app workload. Its later
+requests are respected; the module does not continuously reassert zero.
+
+The tested phone selects balanced in Daily Profile v0.4 for reversible beta
+use. Distributed cpu-mode remains legacy so this one-device short experiment
+does not silently become the default for other users. All private device logs
+and app data remain outside Git. No kernel flash is needed for these tunables.
