@@ -84,3 +84,27 @@ Primary references:
 - https://source.android.com/docs/core/perf/lmkd
 - https://source.android.com/docs/core/perf/cached-apps-freezer
 - https://source.android.com/docs/core/perf/cgroups
+
+## CPU profile candidate
+
+`cpu-trial.sh responsive 120` tests a 20% top-app utilization floor together
+with `cpu.uclamp.latency_sensitive=1`. Unlike the earlier 10% clamp-only
+experiment, this also exercises the kernel's idle/spare-capacity placement
+path in `find_energy_efficient_cpu()`. It does not guarantee faster launches.
+
+`cpu-trial.sh balanced 120` additionally clears Qualcomm's per-CPU minimum
+frequency requests in `msm_performance`, retaining frequency maximums,
+thermal control, the CPU governor and input boost. The observed high floors
+were Qualcomm requests (not demonstrated to be FKM settings). Readback can
+remain high if a different client requests it; do not override that client.
+Both variants are unvalidated on hardware as of this commit: the USB device
+disconnected before these new tests could start. They remain candidates.
+
+The Daily Profile v0.4 includes canonical `cpu-policy.sh` and a `cpu-mode`
+file. Valid choices are `legacy`, `responsive` and `balanced`. Packaged default
+is `legacy` until device comparison. After a tested mode is selected, apply it
+through the module's `apply.sh`. The helper records previous values, restores
+them before changing modes/on uninstall, skips values changed by another
+tuner and rejects restoration from a different boot. It serializes with the
+temporary trials. Disabling the module and rebooting restores ROM boot policy.
+There is no background loop fighting PowerHAL requests or a ZRAM/MGLRU change.
