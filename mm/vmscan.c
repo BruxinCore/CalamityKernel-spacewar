@@ -2461,7 +2461,8 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 			total_high_wmark += high_wmark_pages(zone);
 		}
 
-		if (unlikely(pgdatfile + pgdatfree <= total_high_wmark)) {
+		if (unlikely(pgdatfile + pgdatfree <=
+			     total_high_wmark + ((128UL << 20) >> PAGE_SHIFT))) {
 			/*
 			 * Force SCAN_ANON if there are enough inactive
 			 * anonymous pages on the LRU in eligible zones.
