@@ -1,5 +1,4 @@
 #!/system/bin/sh
-# Canonical policy helper copied into the Daily Profile by CalyBuild.
 set -eu
 MODDIR=${0%/*}
 state="$MODDIR/.cpu-state"
@@ -20,7 +19,6 @@ restore() {
 }
 mode=${1:-$(cat "$MODDIR/cpu-mode" 2>/dev/null || echo legacy)}
 case "$mode" in legacy|responsive|balanced|restore) ;; *) echo 'Invalid Caly CPU mode' >&2; exit 1;; esac
-# Rollback is permitted independently of root/kernel guards at uninstall.
 [ "$(id -u)" = 0 ] || exit 1
 lock=/data/local/tmp/caly-perf-trial.lock
 mkdir "$lock" 2>/dev/null || { echo 'Another Caly CPU operation is active' >&2; exit 1; }
@@ -30,7 +28,10 @@ trap 'exit 130' HUP INT TERM
 printf '%s\n' "$$" > "$lock/pid"
 restore
 case "$mode" in legacy|restore) exit 0;; esac
-[ "$(getprop ro.product.device)" = Spacewar ] || exit 1
+case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop ro.product.odm.device)" in
+  *Spacewar*|*spacewar*) ;;
+  *) exit 1 ;;
+esac
 [ "$(uname -r)" = 5.4.289-qgki-Caly-Rice-Beta ] || exit 1
 [ "$(getprop sys.boot_completed)" = 1 ] || exit 1
 base=/dev/cpuctl/top-app
@@ -39,7 +40,6 @@ for name in cpu.uclamp.min cpu.uclamp.max cpu.uclamp.latency_sensitive; do
 done
 minimum=$(normalize "$base/cpu.uclamp.min")
 maximum=$(normalize "$base/cpu.uclamp.max")
-# Never lower an existing ROM clamp, or write a floor over the ROM maximum.
 awk -v n="$minimum" 'BEGIN {exit !(n+0<=20)}' || exit 1
 awk -v n="$maximum" 'BEGIN {exit !(n=="max" || n+0>=20)}' || exit 1
 if [ "$mode" = balanced ]; then
@@ -62,7 +62,5 @@ change "$base/cpu.uclamp.latency_sensitive" 1 1
 if [ "$mode" = balanced ]; then
   change /sys/module/msm_performance/parameters/cpu_min_freq '0:0 1:0 2:0 3:0 4:0 5:0 6:0 7:0' '0:0 1:0 2:0 3:0 4:0 5:0 6:0 7:0'
 fi
-# Success leaves the selected policy active. Restore operates only on values
-# still owned by this module, and never restores a previous boot's requests.
 trap unlock EXIT
 echo "Caly CPU policy applied: $mode"

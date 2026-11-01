@@ -2,7 +2,10 @@
 set -eu
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || fail 'Root required'
-[ "$(getprop ro.product.device)" = Spacewar ] || fail 'Spacewar required'
+case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop ro.product.odm.device)" in
+  *Spacewar*|*spacewar*) ;;
+  *) fail 'Spacewar required' ;;
+esac
 [ "$(uname -r)" = 5.4.289-qgki-Caly-Rice-Beta ] || fail 'Rice required'
 mode=${1:-responsive}
 case "$mode" in responsive|balanced) ;; *) fail 'Use responsive or balanced';; esac
@@ -46,7 +49,6 @@ printf '%s\n' "$$" > "$lock/pid"
 change() {
   node=$1 value=$2 canonical=$3
   old=$(normalize "$node")
-  # Journal before writing: TERM after a write still has rollback information.
   printf '%s|%s|%s\n' "$node" "$old" "$canonical" >> "$lock/nodes"
   printf '%s\n' "$value" > "$node"
   [ "$(normalize "$node")" = "$canonical" ] || fail "Write not effective: $node"

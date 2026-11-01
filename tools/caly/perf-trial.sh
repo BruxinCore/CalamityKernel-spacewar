@@ -1,9 +1,11 @@
 #!/system/bin/sh
-# Run explicitly through adb/root. Never run at boot or from the installer.
 set -eu
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || fail 'Root required'
-case "$(getprop ro.product.device)" in Spacewar|spacewar) ;; *) fail 'Spacewar required';; esac
+case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop ro.product.odm.device)" in
+  *Spacewar*|*spacewar*) ;;
+  *) fail 'Spacewar required' ;;
+esac
 case "$(uname -r)" in 5.4.289-qgki-Caly-Rice-Beta) ;; *) fail 'Matching Rice kernel required';; esac
 
 read_node() {
@@ -36,7 +38,6 @@ snapshot() {
   printf '\n[cached app freezer policy]\n'
   settings get global cached_apps_freezer || true
   device_config get activity_manager_native_boot use_freezer || true
-  # The settings can be null while the ROM defaults enable the feature.
   dumpsys activity settings | grep -E 'use_freezer=|use_compaction=|Apps frozen:|CUR_MAX_CACHED_PROCESSES=' || true
   printf '\n[LMKD PSI connections]\n'
   lmk_pid=$(pidof lmkd 2>/dev/null || true)
@@ -69,7 +70,6 @@ read -r uptime rest < /proc/uptime
 read -r temp < /sys/class/power_supply/battery/temp
 [ "$temp" -lt 390 ] || fail 'Cool phone below 39 C before comparison'
 
-# Serialize trials; no permanent settings or root module are installed.
 lock=/data/local/tmp/caly-perf-trial.lock
 mkdir "$lock" 2>/dev/null || fail 'Another trial is active (or stale lock needs inspection)'
 node= old= applied=
@@ -101,7 +101,6 @@ case "$mode" in
   mglru-core|mglru-walk)
     node=/sys/kernel/mm/lru_gen/enabled
     [ -w "$node" ] || fail 'MGLRU runtime interface unavailable'
-    # TTL protection can provoke earlier OOM; do not combine it with this test.
     [ "$(cat /sys/kernel/mm/lru_gen/min_ttl_ms)" = 0 ] || fail 'Requires existing min_ttl_ms=0'
     old=$(cat "$node")
     [ "$((old & 1))" = 0 ] || fail 'MGLRU already active; collect baseline first'
@@ -116,8 +115,6 @@ case "$mode" in
     done
     [ -n "$node" ] || fail 'No recognized top-app CPU uclamp controller; inspect task_profiles.json'
     old=$(cat "$node")
-    # This kernel accepts percent units, not raw 0..1024 utilization values.
-    # Never lower an existing ROM floor or exceed its maximum clamp.
     awk -v n="$old" 'BEGIN {exit !(n+0 < 10)}' || fail 'ROM floor already >=10%; do not replace it'
     maximum=$(cat "${node%min}max")
     awk -v n="$maximum" 'BEGIN {exit !(n == "max" || n+0 >= 10)}' || fail 'ROM maximum below trial floor'
@@ -126,8 +123,6 @@ case "$mode" in
 esac
 echo "BASELINE mode=$mode duration=$seconds"
 snapshot
-# Mark the expected value before writing, so a signal right after the write
-# still restores it. Both interfaces have stable canonical read formats.
 case "$mode" in
   mglru-core) applied=0x0001;;
   mglru-walk) applied=0x0003;;
