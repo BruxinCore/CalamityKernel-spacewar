@@ -117,7 +117,7 @@ static int slntc_set_trip_temp(struct thermal_zone_device *tz, int trip,
 	hst->trips[trip].temperature = temp;
 	spin_unlock_irqrestore(&hst->trips_lock, flags);
 
-	pr_info("trips[trip].temperature = %d", trip, temp);
+	pr_info("trips[%d].temperature = %d\n", trip, temp);
 
 	return 0;
 }
@@ -210,7 +210,7 @@ static int slntc_shell_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	result = ida_simple_get(&shell_temp_ida, 0, 0, GFP_KERNEL);
+	result = ida_simple_get(&shell_temp_ida, 0, SHELL_MAX, GFP_KERNEL);
 	if (result < 0) {
 		pr_err("genernal slntc id failed\n");
 		ret = -EINVAL;
@@ -316,9 +316,12 @@ static ssize_t proc_shell_write(struct file *filp, const char __user *buf,
 	}
 
 	if (index >= SHELL_MAX) {
-		pr_err("write invalid para\n");
+		pr_debug_ratelimited("write invalid para: %u\n", index);
 		return count;
 	}
+
+	if (!shell_list[index])
+		return count;
 
 	if(shell_list[index]->trips != NULL){
 		spin_lock_irqsave(&shell_list[index]->trips_lock, flags);
