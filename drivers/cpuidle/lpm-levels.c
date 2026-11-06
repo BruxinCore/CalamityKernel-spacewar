@@ -1,10 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
-
-/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (C) 2006-2007 Adam Belay <abelay@novell.com>
- * Copyright (C) 2009 Intel Corporation
- */
-
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
 
 #include <linux/module.h>
@@ -185,11 +178,7 @@ static int lpm_online_cpu(unsigned int cpu)
 #endif
 
 #ifdef CONFIG_MSM_PM
-/**
- * msm_cpuidle_get_deep_idle_latency - Get deep idle latency value
- *
- * Returns an s32 latency value
- */
+
 s32 msm_cpuidle_get_deep_idle_latency(void)
 {
 	return 10;
@@ -286,7 +275,7 @@ static void disable_rimps_timer(struct lpm_cpu *cpu)
 	ctrl_val = readl_relaxed(cpu->rimps_tmr_base + TIMER_CTRL);
 	writel_relaxed(ctrl_val & ~(TIMER_CONTROL_EN),
 				cpu->rimps_tmr_base + TIMER_CTRL);
-	/* Ensure the write is complete before returning. */
+
 	wmb();
 	spin_unlock(&cpu->cpu_lock);
 
@@ -313,7 +302,6 @@ static void program_rimps_timer(struct lpm_cpu *cpu)
 	next_event = us_to_ticks(next_event);
 	spin_lock(&cpu->cpu_lock);
 
-	/* RIMPS timer pending should be read before programming timeout val */
 	readl_relaxed(cpu->rimps_tmr_base + TIMER_PENDING);
 	ctrl_val = readl_relaxed(cpu->rimps_tmr_base + TIMER_CTRL);
 	writel_relaxed(ctrl_val & ~(TIMER_CONTROL_EN),
@@ -321,7 +309,7 @@ static void program_rimps_timer(struct lpm_cpu *cpu)
 	writel_relaxed(next_event, cpu->rimps_tmr_base + TIMER_VAL);
 	writel_relaxed(ctrl_val | (TIMER_CONTROL_EN),
 				cpu->rimps_tmr_base + TIMER_CTRL);
-	/* Ensure the write is complete before returning. */
+
 	wmb();
 	spin_unlock(&cpu->cpu_lock);
 }
@@ -503,10 +491,6 @@ static uint64_t find_deviation(int *interval, uint32_t ref_stddev,
 		do_div(stddev, divisor);
 		stddev = int_sqrt(stddev);
 
-	/*
-	 * If the deviation is less, return the average, else
-	 * ignore one maximum sample and retry
-	 */
 		if (((avg > stddev * 6) && (divisor >= (MAXSAMPLES - 1)))
 					|| stddev <= ref_stddev) {
 			*stime = ktime_to_us(ktime_get()) + avg;
@@ -531,10 +515,6 @@ static uint64_t lpm_cpuidle_predict(struct cpuidle_device *dev,
 	if (!lpm_prediction || !cpu->lpm_prediction)
 		return 0;
 
-	/*
-	 * Samples are marked invalid when woken-up due to timer,
-	 * so donot predict.
-	 */
 	if (history->hinvalid) {
 		history->hinvalid = 0;
 		history->htmr_wkup = 1;
@@ -542,30 +522,15 @@ static uint64_t lpm_cpuidle_predict(struct cpuidle_device *dev,
 		return 0;
 	}
 
-	/*
-	 * Predict only when all the samples are collected.
-	 */
 	if (history->nsamp < MAXSAMPLES) {
 		history->stime = 0;
 		return 0;
 	}
 
-	/*
-	 * Check if the samples are not much deviated, if so use the
-	 * average of those as predicted sleep time. Else if any
-	 * specific mode has more premature exits return the index of
-	 * that mode.
-	 */
-
 	avg = find_deviation(history->resi, cpu->ref_stddev, &(history->stime));
 	if (avg)
 		return avg;
 
-	/*
-	 * Find the number of premature exits for each of the mode,
-	 * excluding clockgating mode, and they are more than fifty
-	 * percent restrict that and deeper modes.
-	 */
 	if (history->htmr_wkup != 1) {
 		for (j = 1; j < cpu->nlevels; j++) {
 			struct lpm_cpu_level *level = &cpu->levels[j];
@@ -726,11 +691,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 			break;
 
 		if (!i && !check_cpu_isolated(dev->cpu)) {
-			/*
-			 * If the next_wake_us itself is not sufficient for
-			 * deeper low power modes than clock gating do not
-			 * call prediction.
-			 */
+
 			if (next_wakeup_us > max_residency) {
 				predicted = lpm_cpuidle_predict(dev, cpu,
 					&idx_restrict, &idx_restrict_time,
@@ -750,11 +711,6 @@ static int cpu_power_select(struct cpuidle_device *dev,
 			: (next_wakeup_us <= max_residency))
 			break;
 	}
-
-	/*
-	 * Start timer to avoid staying in shallower mode forever
-	 * incase of misprediciton
-	 */
 
 	pwr_params = &cpu->levels[best_level].pwr;
 	min_residency = pwr_params->min_residency;
@@ -1110,12 +1066,7 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 	}
 
 	if (level->notify_rpm) {
-		/*
-		 * Print enabled clocks and regulators which are on during
-		 * system suspend. This debug information is useful to know
-		 * which resources are enabled and preventing system level
-		 * LPMs (XO and Vmin).
-		 */
+
 		if (!from_idle) {
 			clock_debug_print_enabled();
 			regulator_debug_print_enabled();
@@ -1166,13 +1117,6 @@ static void cluster_prepare(struct lpm_cluster *cluster,
 			cpumask_or(&lvl->num_cpu_votes, cpu,
 					&lvl->num_cpu_votes);
 	}
-
-	/*
-	 * cluster_select() does not make any configuration changes. So its ok
-	 * to release the lock here. If a core wakes up for a rude request,
-	 * it need not wait for another to finish its cluster selection and
-	 * configuration process
-	 */
 
 	if (!cpumask_equal(&cluster->num_children_in_sync,
 				&cluster->child_cpus))
@@ -1287,17 +1231,6 @@ static inline void cpu_prepare(struct lpm_cpu *cpu, int cpu_index,
 {
 	struct lpm_cpu_level *cpu_level = &cpu->levels[cpu_index];
 
-	/* Use broadcast timer for aggregating sleep mode within a cluster.
-	 * A broadcast timer could be used in the following scenarios
-	 * 1) The architected timer HW gets reset during certain low power
-	 * modes and the core relies on a external(broadcast) timer to wake up
-	 * from sleep. This information is passed through device tree.
-	 * 2) The CPU low power mode could trigger a system low power mode.
-	 * The low power module relies on Broadcast timer to aggregate the
-	 * next wakeup within a cluster, in which case, CPU switches over to
-	 * use broadcast timer.
-	 */
-
 	if (from_idle && cpu_level->is_reset)
 		cpu_pm_enter();
 
@@ -1335,10 +1268,6 @@ static int get_cluster_id(struct lpm_cluster *cluster, int *aff_lvl,
 		state_id += (level->psci_id & cluster->psci_mode_mask)
 					<< cluster->psci_mode_shift;
 
-		/*
-		 * We may have updated the broadcast timers, update
-		 * the wakeup value by reading the bc timer directly.
-		 */
 		if (level->notify_rpm)
 			if (sys_pm_ops && sys_pm_ops->update_wakeup)
 				sys_pm_ops->update_wakeup(from_idle);
@@ -1354,9 +1283,6 @@ static int psci_enter_sleep(struct lpm_cpu *cpu, int idx, bool from_idle)
 {
 	int affinity_level = 0, state_id = 0, power_state = 0;
 	int ret, success;
-	/*
-	 * idx = 0 is the default LPM state
-	 */
 
 	if (!idx) {
 		if (cpu->bias)
@@ -1467,7 +1393,17 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	uint64_t start_time = ktime_to_ns(start), end_time;
 	int ret = -EBUSY;
 
-	/* Read the timer from the CPU that is entering idle */
+	if (!cpu)
+		return -EPERM;
+
+	if (idx > 0 && lpm_disallowed(0, dev->cpu, cpu))
+		idx = 0;
+
+	for (; idx > 0; idx--) {
+		if (lpm_cpu_mode_allow(dev->cpu, idx, true))
+			break;
+	}
+
 	per_cpu(next_hrtimer, dev->cpu) = tick_nohz_get_next_hrtimer();
 
 	cpu_prepare(cpu, idx, true);
@@ -1618,7 +1554,7 @@ static int cluster_cpuidle_register(struct lpm_cluster *cl)
 
 			st->flags = 0;
 			st->exit_latency = cpu_level->pwr.exit_latency;
-			st->target_residency = 0;
+			st->target_residency = cpu_level->pwr.min_residency;
 			st->enter = lpm_cpuidle_enter;
 			if (i == lpm_cpu->nlevels - 1)
 				st->enter_s2idle = lpm_cpuidle_s2idle;
@@ -1788,12 +1724,6 @@ static int lpm_probe(struct platform_device *pdev)
 		return PTR_ERR(lpm_root_node);
 	}
 
-	/*
-	 * Register hotplug notifier before broadcast time to ensure there
-	 * to prevent race where a broadcast timer might not be setup on for a
-	 * core.  BUG in existing code but no known issues possibly because of
-	 * how late lpm_levels gets initialized.
-	 */
 	for_each_possible_cpu(cpu) {
 		cpu_histtimer = &per_cpu(histtimer, cpu);
 		hrtimer_init(cpu_histtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
