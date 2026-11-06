@@ -1,29 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/*
- * Copyright (C) 2013 ARM Ltd.
- * Copyright (C) 2013 Linaro.
- *
- * This code is based on glibc cortex strings work originally authored by Linaro
- * be found @
- *
- * http://bazaar.launchpad.net/~linaro-toolchain-dev/cortex-strings/trunk/
- * files/head:/src/aarch64/
- */
-
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/cache.h>
-
-/*
- * Fill in the buffer with character c (alignment handled by the hardware)
- *
- * Parameters:
- *	x0 - buf
- *	x1 - c
- *	x2 - n
- * Returns:
- *	x0 - buf
- */
 
 dstin		.req	x0
 val		.req	w1
@@ -44,7 +21,7 @@ tmp3		.req	x9
 
 SYM_FUNC_START_ALIAS(__memset)
 SYM_FUNC_START_WEAK_PI(memset)
-	mov	dst, dstin	/* Preserve return value.  */
+	mov	dst, dstin
 	and	A_lw, val, #255
 	orr	A_lw, A_lw, A_lw, lsl #8
 	orr	A_lw, A_lw, A_lw, lsl #16
@@ -52,7 +29,7 @@ SYM_FUNC_START_WEAK_PI(memset)
 
 	cmp	count, #15
 	b.hi	.Lover16_proc
-	/*All store maybe are non-aligned..*/
+
 	tbz	count, #3, 1f
 	str	A_l, [dst], #8
 1:
@@ -68,17 +45,13 @@ SYM_FUNC_START_WEAK_PI(memset)
 	ret
 
 .Lover16_proc:
-	/*Whether  the start address is aligned with 16.*/
+
 	neg	tmp2, dst
 	ands	tmp2, tmp2, #15
 	b.eq	.Laligned
-/*
-* The count is not less than 16, we can use stp to store the start 16 bytes,
-* then adjust the dst aligned with 16.This process will make the current
-* memory address at alignment boundary.
-*/
-	stp	A_l, A_l, [dst] /*non-aligned store..*/
-	/*make the dst aligned..*/
+
+	stp	A_l, A_l, [dst]
+
 	sub	count, count, tmp2
 	add	dst, dst, tmp2
 
@@ -99,25 +72,18 @@ SYM_FUNC_START_WEAK_PI(memset)
 	stp	A_l, A_l, [dst], #16
 2:
 	stp	A_l, A_l, [dst], #16
-/*
-* The last store length is less than 16,use stp to write last 16 bytes.
-* It will lead some bytes written twice and the access is non-aligned.
-*/
+
 3:
 	ands	count, count, #15
 	cbz	count, 4f
 	add	dst, dst, count
-	stp	A_l, A_l, [dst, #-16]	/* Repeat some/all of last store. */
+	stp	A_l, A_l, [dst, #-16]
 4:
 	ret
 
-	/*
-	* Critical loop. Start at a new cache line boundary. Assuming
-	* 64 bytes per line, this ensures the entire loop is in one line.
-	*/
 	.p2align	L1_CACHE_SHIFT
 .Lnot_short:
-	sub	dst, dst, #16/* Pre-bias.  */
+	sub	dst, dst, #16
 	sub	count, count, #64
 1:
 	stp	A_l, A_l, [dst, #16]
@@ -132,55 +98,37 @@ SYM_FUNC_START_WEAK_PI(memset)
 .Lexitfunc:
 	ret
 
-	/*
-	* For zeroing memory, check to see if we can use the ZVA feature to
-	* zero entire 'cache' lines.
-	*/
 .Lzero_mem:
 	cmp	count, #63
 	b.le	.Ltail63
-	/*
-	* For zeroing small amounts of memory, it's not worth setting up
-	* the line-clear code.
-	*/
+
 	cmp	count, #128
-	b.lt	.Lnot_short /*count is at least  128 bytes*/
+	b.lt	.Lnot_short
 
 	mrs	tmp1, dczid_el0
 	tbnz	tmp1, #4, .Lnot_short
 	mov	tmp3w, #4
-	and	zva_len, tmp1w, #15	/* Safety: other bits reserved.  */
+	and	zva_len, tmp1w, #15
 	lsl	zva_len, tmp3w, zva_len
 
 	ands	tmp3w, zva_len, #63
-	/*
-	* ensure the zva_len is not less than 64.
-	* It is not meaningful to use ZVA if the block size is less than 64.
-	*/
+
 	b.ne	.Lnot_short
 .Lzero_by_line:
-	/*
-	* Compute how far we need to go to become suitably aligned. We're
-	* already at quad-word alignment.
-	*/
+
 	cmp	count, zva_len_x
-	b.lt	.Lnot_short		/* Not enough to reach alignment.  */
+	b.lt	.Lnot_short
 	sub	zva_bits_x, zva_len_x, #1
 	neg	tmp2, dst
 	ands	tmp2, tmp2, zva_bits_x
-	b.eq	2f			/* Already aligned.  */
-	/* Not aligned, check that there's enough to copy after alignment.*/
+	b.eq	2f
+
 	sub	tmp1, count, tmp2
-	/*
-	* grantee the remain length to be ZVA is bigger than 64,
-	* avoid to make the 2f's process over mem range.*/
+
 	cmp	tmp1, #64
-	ccmp	tmp1, zva_len_x, #8, ge	/* NZCV=0b1000 */
+	ccmp	tmp1, zva_len_x, #8, ge
 	b.lt	.Lnot_short
-	/*
-	* We know that there's at least 64 bytes to zero and that it's safe
-	* to overrun by 64 bytes.
-	*/
+
 	mov	count, tmp1
 1:
 	stp	A_l, A_l, [dst]
@@ -190,7 +138,7 @@ SYM_FUNC_START_WEAK_PI(memset)
 	stp	A_l, A_l, [dst, #48]
 	add	dst, dst, #64
 	b.ge	1b
-	/* We've overrun a bit, so adjust dst downwards.*/
+
 	add	dst, dst, tmp2
 2:
 	sub	count, count, zva_len_x
