@@ -1,50 +1,13 @@
 #ifndef __LZ4DEFS_H__
 #define __LZ4DEFS_H__
 
-/*
- * lz4defs.h -- common and architecture specific defines for the kernel usage
-
- * LZ4 - Fast LZ compression algorithm
- * Copyright (C) 2011-2016, Yann Collet.
- * BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *	* Redistributions of source code must retain the above copyright
- *	  notice, this list of conditions and the following disclaimer.
- *	* Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * You can contact the author at :
- *	- LZ4 homepage : http://www.lz4.org
- *	- LZ4 source repository : https://github.com/lz4/lz4
- *
- *	Changed for kernel usage by:
- *	Sven Schmidt <4sschmid@informatik.uni-hamburg.de>
- */
-
 #include <asm/unaligned.h>
 
 #include <linux/bitops.h>
-#include <linux/string.h>	 /* memset, memcpy */
+#include <linux/string.h>
 
 #define FORCE_INLINE __always_inline
 
-/*-************************************
- *	Basic Types
- **************************************/
 #include <linux/types.h>
 
 typedef	uint8_t BYTE;
@@ -54,9 +17,6 @@ typedef	int32_t S32;
 typedef uint64_t U64;
 typedef uintptr_t uptrval;
 
-/*-************************************
- *	Architecture specifics
- **************************************/
 #if defined(CONFIG_64BIT)
 #define LZ4_ARCH64 1
 #else
@@ -69,21 +29,14 @@ typedef uintptr_t uptrval;
 #define LZ4_LITTLE_ENDIAN 0
 #endif
 
-/*-************************************
- *	Constants
- **************************************/
 #define MINMATCH 4
 
 #define WILDCOPYLENGTH 8
 #define LASTLITERALS 5
 #define MFLIMIT (WILDCOPYLENGTH + MINMATCH)
-/*
- * ensure it's possible to write 2 x wildcopyLength
- * without overflowing output buffer
- */
+
 #define MATCH_SAFEGUARD_DISTANCE  ((2 * WILDCOPYLENGTH) - MINMATCH)
 
-/* Increase this value ==> compression run slower on incompressible data */
 #define LZ4_SKIPTRIGGER 6
 
 #define HASH_UNIT sizeof(size_t)
@@ -101,9 +54,6 @@ typedef uintptr_t uptrval;
 #define RUN_BITS (8 - ML_BITS)
 #define RUN_MASK ((1U << RUN_BITS) - 1)
 
-/*-************************************
- *	Reading and writing into memory
- **************************************/
 static FORCE_INLINE U16 LZ4_read16(const void *ptr)
 {
 	return get_unaligned((const U16 *)ptr);
@@ -157,10 +107,6 @@ static FORCE_INLINE void LZ4_copy8(void *dst, const void *src)
 #endif
 }
 
-/*
- * customized variant of memcpy,
- * which can overwrite up to 7 bytes beyond dstEnd
- */
 static FORCE_INLINE void LZ4_wildCopy(void *dstPtr,
 	const void *srcPtr, void *dstEnd)
 {
@@ -178,7 +124,11 @@ static FORCE_INLINE void LZ4_wildCopy(void *dstPtr,
 static FORCE_INLINE unsigned int LZ4_NbCommonBytes(register size_t val)
 {
 #if LZ4_LITTLE_ENDIAN
-	return __ffs(val) >> 3;
+#if LZ4_ARCH64
+	return (unsigned int)__builtin_ctzll(val) >> 3;
+#else
+	return (unsigned int)__builtin_ctz(val) >> 3;
+#endif
 #else
 	return (BITS_PER_LONG - 1 - __fls(val)) >> 3;
 #endif

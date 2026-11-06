@@ -1,14 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Cryptographic API.
- *
- * Copyright (c) 2013 Chanho Min <chanho.min@lge.com>
- */
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/crypto.h>
-#include <linux/vmalloc.h>
+#include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/lz4.h>
 #include <crypto/internal/scompress.h>
 
@@ -20,7 +14,7 @@ static void *lz4_alloc_ctx(struct crypto_scomp *tfm)
 {
 	void *ctx;
 
-	ctx = vmalloc(LZ4_MEM_COMPRESS);
+	ctx = kvmalloc(LZ4_MEM_COMPRESS, GFP_KERNEL);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 
@@ -40,7 +34,7 @@ static int lz4_init(struct crypto_tfm *tfm)
 
 static void lz4_free_ctx(struct crypto_scomp *tfm, void *ctx)
 {
-	vfree(ctx);
+	kvfree(ctx);
 }
 
 static void lz4_exit(struct crypto_tfm *tfm)

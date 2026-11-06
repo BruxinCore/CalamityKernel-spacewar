@@ -1,43 +1,3 @@
-/*
- * xxHash - Extremely Fast Hash algorithm
- * Copyright (C) 2012-2016, Yann Collet.
- *
- * BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the following disclaimer
- *     in the documentation and/or other materials provided with the
- *     distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License version 2 as published by the
- * Free Software Foundation. This program is dual-licensed; you may select
- * either version 2 of the GNU General Public License ("GPL") or BSD license
- * ("BSD").
- *
- * You can contact the author at:
- * - xxHash homepage: http://cyan4973.github.io/xxHash/
- * - xxHash source repository: https://github.com/Cyan4973/xxHash
- */
-
 #include <asm/unaligned.h>
 #include <linux/errno.h>
 #include <linux/compiler.h>
@@ -46,9 +6,6 @@
 #include <linux/string.h>
 #include <linux/xxhash.h>
 
-/*-*************************************
- * Macros
- **************************************/
 #define xxh_rotl32(x, r) ((x << r) | (x >> (32 - r)))
 #define xxh_rotl64(x, r) ((x << r) | (x >> (64 - r)))
 
@@ -58,9 +15,6 @@
 # define XXH_CPU_LITTLE_ENDIAN 0
 #endif
 
-/*-*************************************
- * Constants
- **************************************/
 static const uint32_t PRIME32_1 = 2654435761U;
 static const uint32_t PRIME32_2 = 2246822519U;
 static const uint32_t PRIME32_3 = 3266489917U;
@@ -73,24 +27,18 @@ static const uint64_t PRIME64_3 =  1609587929392839161ULL;
 static const uint64_t PRIME64_4 =  9650029242287828579ULL;
 static const uint64_t PRIME64_5 =  2870177450012600261ULL;
 
-/*-**************************
- *  Utils
- ***************************/
 void xxh32_copy_state(struct xxh32_state *dst, const struct xxh32_state *src)
 {
-	memcpy(dst, src, sizeof(*dst));
+	__builtin_memcpy(dst, src, sizeof(*dst));
 }
 EXPORT_SYMBOL(xxh32_copy_state);
 
 void xxh64_copy_state(struct xxh64_state *dst, const struct xxh64_state *src)
 {
-	memcpy(dst, src, sizeof(*dst));
+	__builtin_memcpy(dst, src, sizeof(*dst));
 }
 EXPORT_SYMBOL(xxh64_copy_state);
 
-/*-***************************
- * Simple Hash Functions
- ****************************/
 static uint32_t xxh32_round(uint32_t seed, const uint32_t input)
 {
 	seed += input * PRIME32_2;
@@ -236,34 +184,31 @@ uint64_t xxh64(const void *input, const size_t len, const uint64_t seed)
 }
 EXPORT_SYMBOL(xxh64);
 
-/*-**************************************************
- * Advanced Hash Functions
- ***************************************************/
 void xxh32_reset(struct xxh32_state *statePtr, const uint32_t seed)
 {
-	/* use a local state for memcpy() to avoid strict-aliasing warnings */
+
 	struct xxh32_state state;
 
-	memset(&state, 0, sizeof(state));
+	__builtin_memset(&state, 0, sizeof(state));
 	state.v1 = seed + PRIME32_1 + PRIME32_2;
 	state.v2 = seed + PRIME32_2;
 	state.v3 = seed + 0;
 	state.v4 = seed - PRIME32_1;
-	memcpy(statePtr, &state, sizeof(state));
+	__builtin_memcpy(statePtr, &state, sizeof(state));
 }
 EXPORT_SYMBOL(xxh32_reset);
 
 void xxh64_reset(struct xxh64_state *statePtr, const uint64_t seed)
 {
-	/* use a local state for memcpy() to avoid strict-aliasing warnings */
+
 	struct xxh64_state state;
 
-	memset(&state, 0, sizeof(state));
+	__builtin_memset(&state, 0, sizeof(state));
 	state.v1 = seed + PRIME64_1 + PRIME64_2;
 	state.v2 = seed + PRIME64_2;
 	state.v3 = seed + 0;
 	state.v4 = seed - PRIME64_1;
-	memcpy(statePtr, &state, sizeof(state));
+	__builtin_memcpy(statePtr, &state, sizeof(state));
 }
 EXPORT_SYMBOL(xxh64_reset);
 
@@ -278,16 +223,16 @@ int xxh32_update(struct xxh32_state *state, const void *input, const size_t len)
 	state->total_len_32 += (uint32_t)len;
 	state->large_len |= (len >= 16) | (state->total_len_32 >= 16);
 
-	if (state->memsize + len < 16) { /* fill in tmp buffer */
-		memcpy((uint8_t *)(state->mem32) + state->memsize, input, len);
+	if (state->memsize + len < 16) {
+		__builtin_memcpy((uint8_t *)(state->mem32) + state->memsize, input, len);
 		state->memsize += (uint32_t)len;
 		return 0;
 	}
 
-	if (state->memsize) { /* some data left from previous update */
+	if (state->memsize) {
 		const uint32_t *p32 = state->mem32;
 
-		memcpy((uint8_t *)(state->mem32) + state->memsize, input,
+		__builtin_memcpy((uint8_t *)(state->mem32) + state->memsize, input,
 			16 - state->memsize);
 
 		state->v1 = xxh32_round(state->v1, get_unaligned_le32(p32));
@@ -328,7 +273,7 @@ int xxh32_update(struct xxh32_state *state, const void *input, const size_t len)
 	}
 
 	if (p < b_end) {
-		memcpy(state->mem32, p, (size_t)(b_end-p));
+		__builtin_memcpy(state->mem32, p, (size_t)(b_end-p));
 		state->memsize = (uint32_t)(b_end-p);
 	}
 
@@ -347,7 +292,7 @@ uint32_t xxh32_digest(const struct xxh32_state *state)
 		h32 = xxh_rotl32(state->v1, 1) + xxh_rotl32(state->v2, 7) +
 			xxh_rotl32(state->v3, 12) + xxh_rotl32(state->v4, 18);
 	} else {
-		h32 = state->v3 /* == seed */ + PRIME32_5;
+		h32 = state->v3   + PRIME32_5;
 	}
 
 	h32 += state->total_len_32;
@@ -384,16 +329,16 @@ int xxh64_update(struct xxh64_state *state, const void *input, const size_t len)
 
 	state->total_len += len;
 
-	if (state->memsize + len < 32) { /* fill in tmp buffer */
-		memcpy(((uint8_t *)state->mem64) + state->memsize, input, len);
+	if (state->memsize + len < 32) {
+		__builtin_memcpy(((uint8_t *)state->mem64) + state->memsize, input, len);
 		state->memsize += (uint32_t)len;
 		return 0;
 	}
 
-	if (state->memsize) { /* tmp buffer is full */
+	if (state->memsize) {
 		uint64_t *p64 = state->mem64;
 
-		memcpy(((uint8_t *)p64) + state->memsize, input,
+		__builtin_memcpy(((uint8_t *)p64) + state->memsize, input,
 			32 - state->memsize);
 
 		state->v1 = xxh64_round(state->v1, get_unaligned_le64(p64));
@@ -433,7 +378,7 @@ int xxh64_update(struct xxh64_state *state, const void *input, const size_t len)
 	}
 
 	if (p < b_end) {
-		memcpy(state->mem64, p, (size_t)(b_end-p));
+		__builtin_memcpy(state->mem64, p, (size_t)(b_end-p));
 		state->memsize = (uint32_t)(b_end - p);
 	}
 
