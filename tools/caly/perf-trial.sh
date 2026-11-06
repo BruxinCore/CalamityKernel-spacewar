@@ -6,7 +6,7 @@ case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop
   *Spacewar*|*spacewar*) ;;
   *) fail 'Spacewar required' ;;
 esac
-case "$(uname -r)" in 5.4.289-qgki-Caly-Rice-Beta) ;; *) fail 'Matching Rice kernel required';; esac
+case "$(uname -r)" in 5.4.*-qgki-Caly-Rice-Beta) ;; *) fail 'Matching Rice kernel required';; esac
 
 read_node() {
   [ -r "$1" ] || return 0
