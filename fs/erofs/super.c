@@ -1,9 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (C) 2017-2018 HUAWEI, Inc.
- *             http://www.huawei.com/
- * Created by Gao Xiang <gaoxiang25@huawei.com>
- */
 #include <linux/module.h>
 #include <linux/buffer_head.h>
 #include <linux/statfs.h>
@@ -61,7 +55,6 @@ static struct inode *erofs_alloc_inode(struct super_block *sb)
 	if (!vi)
 		return NULL;
 
-	/* zero out everything except vfs_inode */
 	memset(vi, 0, offsetof(struct erofs_inode, vfs_inode));
 	return &vi->vfs_inode;
 }
@@ -70,7 +63,6 @@ static void erofs_free_inode(struct inode *inode)
 {
 	struct erofs_inode *vi = EROFS_I(inode);
 
-	/* be careful of RCU symlink path */
 	if (inode->i_op == &erofs_fast_symlink_iops)
 		kfree(inode->i_link);
 	kfree(vi->xattr_shared_xattrs);
@@ -85,7 +77,6 @@ static bool check_layout_compatibility(struct super_block *sb,
 
 	EROFS_SB(sb)->feature_incompat = feature;
 
-	/* check if current kernel meets all mandatory requirements */
 	if (feature & (~EROFS_ALL_FEATURE_INCOMPAT)) {
 		erofs_err(sb,
 			  "unidentified incompatible feature %x, please upgrade kernel version",
@@ -101,6 +92,7 @@ static int erofs_read_superblock(struct super_block *sb)
 	struct page *page;
 	struct erofs_super_block *dsb;
 	unsigned int blkszbits;
+	u16 lz4_max_distance = 0;
 	void *data;
 	int ret;
 
@@ -122,7 +114,7 @@ static int erofs_read_superblock(struct super_block *sb)
 	}
 
 	blkszbits = dsb->blkszbits;
-	/* 9(512 bytes) + LOG_SECTORS_PER_BLOCK == LOG_BLOCK_SIZE */
+
 	if (blkszbits != LOG_BLOCK_SIZE) {
 		erofs_err(sb, "blkszbits %u isn't supported on this platform",
 			  blkszbits);
@@ -148,15 +140,18 @@ static int erofs_read_superblock(struct super_block *sb)
 
 	ret = strscpy(sbi->volume_name, dsb->volume_name,
 		      sizeof(dsb->volume_name));
-	if (ret < 0) {	/* -E2BIG */
+	if (ret < 0) {
 		erofs_err(sb, "bad volume name without NIL terminator");
 		ret = -EFSCORRUPTED;
 		goto out;
 	}
+	lz4_max_distance = le16_to_cpu(dsb->u1.lz4_max_distance);
 	ret = 0;
 out:
 	kunmap_atomic(data);
 	put_page(page);
+	if (!ret)
+		ret = z_erofs_load_lz4_config(sb, lz4_max_distance);
 	return ret;
 }
 
@@ -195,12 +190,11 @@ static int erofs_build_cache_strategy(struct super_block *sb,
 }
 #endif
 
-/* set up default EROFS parameters */
 static void erofs_default_options(struct erofs_sb_info *sbi)
 {
 #ifdef CONFIG_EROFS_FS_ZIP
 	sbi->cache_strategy = EROFS_ZIP_CACHE_READAROUND;
-	sbi->max_sync_decompress_pages = 3;
+	sbi->max_sync_decompress_pages = 4;
 #endif
 #ifdef CONFIG_EROFS_FS_XATTR
 	set_opt(sbi, XATTR_USER);
@@ -295,7 +289,7 @@ static const struct address_space_operations managed_cache_aops;
 
 static int erofs_managed_cache_releasepage(struct page *page, gfp_t gfp_mask)
 {
-	int ret = 1;	/* 0 - busy */
+	int ret = 1;
 	struct address_space *const mapping = page->mapping;
 
 	DBG_BUGON(!PageLocked(page));
@@ -315,7 +309,6 @@ static void erofs_managed_cache_invalidatepage(struct page *page,
 
 	DBG_BUGON(!PageLocked(page));
 
-	/* Check for potential overflow in debug mode */
 	DBG_BUGON(stop > PAGE_SIZE || stop < length);
 
 	if (offset == 0 && stop == PAGE_SIZE)
@@ -380,7 +373,7 @@ static int erofs_fill_super(struct super_block *sb, void *data, int silent)
 #ifdef CONFIG_EROFS_FS_XATTR
 	sb->s_xattr = erofs_xattr_handlers;
 #endif
-	/* set erofs default mount options */
+
 	erofs_default_options(sbi);
 
 	err = erofs_parse_options(sb, data);
@@ -396,7 +389,6 @@ static int erofs_fill_super(struct super_block *sb, void *data, int silent)
 	INIT_RADIX_TREE(&sbi->workstn_tree, GFP_ATOMIC);
 #endif
 
-	/* get the root inode */
 	inode = erofs_iget(sb, ROOT_NID(sbi), true);
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
@@ -413,7 +405,7 @@ static int erofs_fill_super(struct super_block *sb, void *data, int silent)
 		return -ENOMEM;
 
 	erofs_shrinker_register(sb);
-	/* sb->s_umount is already locked, SB_ACTIVE and SB_BORN are not set */
+
 	err = erofs_init_managed_cache(sb);
 	if (err)
 		return err;
@@ -429,10 +421,6 @@ static struct dentry *erofs_mount(struct file_system_type *fs_type, int flags,
 	return mount_bdev(fs_type, flags, dev_name, data, erofs_fill_super);
 }
 
-/*
- * could be triggered after deactivate_locked_super()
- * is called, thus including umount and failed to initialize.
- */
 static void erofs_kill_sb(struct super_block *sb)
 {
 	struct erofs_sb_info *sbi;
@@ -448,7 +436,6 @@ static void erofs_kill_sb(struct super_block *sb)
 	sb->s_fs_info = NULL;
 }
 
-/* called when ->s_root is non-NULL */
 static void erofs_put_super(struct super_block *sb)
 {
 	struct erofs_sb_info *const sbi = EROFS_SB(sb);
@@ -476,6 +463,7 @@ static int __init erofs_module_init(void)
 	int err;
 
 	erofs_check_ondisk_layout_definitions();
+	erofs_pcpubuf_init();
 
 	erofs_inode_cachep = kmem_cache_create("erofs_inode",
 					       sizeof(struct erofs_inode), 0,
@@ -507,6 +495,7 @@ zip_err:
 shrinker_err:
 	kmem_cache_destroy(erofs_inode_cachep);
 icache_err:
+	erofs_pcpubuf_exit();
 	return err;
 }
 
@@ -516,12 +505,11 @@ static void __exit erofs_module_exit(void)
 	z_erofs_exit_zip_subsystem();
 	erofs_exit_shrinker();
 
-	/* Ensure all RCU free inodes are safe before cache is destroyed. */
 	rcu_barrier();
 	kmem_cache_destroy(erofs_inode_cachep);
+	erofs_pcpubuf_exit();
 }
 
-/* get filesystem statistics */
 static int erofs_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct super_block *sb = dentry->d_sb;
@@ -612,4 +600,3 @@ module_exit(erofs_module_exit);
 MODULE_DESCRIPTION("Enhanced ROM File System");
 MODULE_AUTHOR("Gao Xiang, Chao Yu, Miao Xie, CONSUMER BG, HUAWEI Inc.");
 MODULE_LICENSE("GPL");
-
