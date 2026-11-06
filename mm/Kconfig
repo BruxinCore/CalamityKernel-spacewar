@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-only
 
 menu "Memory Management options"
 
@@ -79,11 +78,6 @@ config FLAT_NODE_MEM_MAP
 	def_bool y
 	depends on !SPARSEMEM
 
-#
-# Both the NUMA code and DISCONTIGMEM use arrays of pg_data_t's
-# to represent different areas of memory.  This variable allows
-# those dependencies to exist individually.
-#
 config NEED_MULTIPLE_NODES
 	def_bool y
 	depends on DISCONTIGMEM || NUMA
@@ -92,24 +86,9 @@ config HAVE_MEMORY_PRESENT
 	def_bool y
 	depends on ARCH_HAVE_MEMORY_PRESENT || SPARSEMEM
 
-#
-# SPARSEMEM_EXTREME (which is the default) does some bootmem
-# allocations when memory_present() is called.  If this cannot
-# be done on your architecture, select this option.  However,
-# statically allocating the mem_section[] array can potentially
-# consume vast quantities of .bss, so be careful.
-#
-# This option will also potentially produce smaller runtime code
-# with gcc 3.4 and later.
-#
 config SPARSEMEM_STATIC
 	bool
 
-#
-# Architecture platforms which require a two level mem_section in SPARSEMEM
-# must select this option. This is usually for architecture platforms with
-# an extremely sparse physical address space.
-#
 config SPARSEMEM_EXTREME
 	def_bool y
 	depends on SPARSEMEM && !SPARSEMEM_STATIC
@@ -142,14 +121,9 @@ config ARCH_KEEP_MEMBLOCK
 config MEMORY_ISOLATION
 	bool
 
-#
-# Only be set on architectures that have completely implemented memory hotplug
-# feature. If you are not sure, don't touch it.
-#
 config HAVE_BOOTMEM_INFO_NODE
 	def_bool n
 
-# eventually, we can have this option just 'select SPARSEMEM'
 config MEMORY_HOTPLUG
 	bool "Allow for memory hot-add"
 	depends on SPARSEMEM || X86_64_ACPI_NUMA
@@ -200,14 +174,6 @@ config MEMORY_HOTREMOVE
 	depends on MEMORY_HOTPLUG && ARCH_ENABLE_MEMORY_HOTREMOVE
 	depends on MIGRATION
 
-# Heavily threaded applications may benefit from splitting the mm-wide
-# page_table_lock, so that faults on different parts of the user address
-# space can be handled with less contention: split it at this NR_CPUS.
-# Default to 4 for wider testing, though 8 might be more appropriate.
-# ARM's adjust_pte (unused if VIPT) depends on mm-wide page_table_lock.
-# PA-RISC 7xxx's spinlock_t would enlarge struct page from 32 to 44 bytes.
-# DEBUG_SPINLOCK and DEBUG_LOCK_ALLOC spinlock_t also enlarge struct page.
-#
 config SPLIT_PTLOCK_CPUS
 	int
 	default "999999" if !MMU
@@ -218,13 +184,9 @@ config SPLIT_PTLOCK_CPUS
 config ARCH_ENABLE_SPLIT_PMD_PTLOCK
 	bool
 
-#
-# support for memory balloon
 config MEMORY_BALLOON
 	bool
 
-#
-# support for memory balloon compaction
 config BALLOON_COMPACTION
 	bool "Allow for balloon memory compaction/migration"
 	def_bool y
@@ -238,8 +200,6 @@ config BALLOON_COMPACTION
 	  pages enlisted as being part of memory balloon devices avoids the
 	  scenario aforementioned and helps improving memory defragmentation.
 
-#
-# support for memory compaction
 config COMPACTION
 	bool "Allow for memory compaction"
 	def_bool y
@@ -255,9 +215,6 @@ config COMPACTION
           it and then we would be really interested to hear about that at
           linux-mm@kvack.org.
 
-#
-# support for page migration
-#
 config MIGRATION
 	bool "Page migration"
 	def_bool y
@@ -442,9 +399,6 @@ config	TRANSPARENT_HUGE_PAGECACHE
 	def_bool y
 	depends on TRANSPARENT_HUGEPAGE
 
-#
-# UP and nommu archs use km based percpu allocator
-#
 config NEED_PER_CPU_KM
 	depends on !SMP
 	bool
@@ -624,6 +578,15 @@ config ZSMALLOC_STAT
 	  information to userspace via debugfs.
 	  If unsure, say N.
 
+config ZSMALLOC_CHAIN_SIZE
+	int "Maximum number of physical pages per-zspage"
+	range 1 16
+	default 8
+	depends on ZSMALLOC
+	help
+	  This option sets the upper limit on the number of physical pages
+	  that a zspage can chain together.
+
 config VMAP_LAZY_PURGING_FACTOR
 	int "multiplier to the size of purged vmap areas"
 	default "8" if ARM
@@ -711,10 +674,6 @@ config ZONE_DEVICE
 config DEV_PAGEMAP_OPS
 	bool
 
-#
-# Helpers to mirror range of the CPU page tables of a process into device page
-# tables.
-#
 config HMM_MIRROR
 	bool
 	depends on MMU
@@ -814,13 +773,6 @@ config READ_ONLY_THP_FOR_FS
 config ARCH_HAS_PTE_SPECIAL
 	bool
 
-#
-# Some architectures require a special hugepage directory format that is
-# required to support multiple hugepage sizes. For example a4fe3ce76
-# "powerpc/mm: Allow more flexible layouts for hugepage pagetables"
-# introduced it on powerpc.  This allows for a more flexible hugepage
-# pagetable layouts.
-#
 config ARCH_HAS_HUGEPD
 	bool
 
@@ -851,11 +803,9 @@ config OOM_TASK_PRIORITY_ADJ_LIMIT
 	  tasks with an oom_score_adj value above a certain threshold
 	  before considering tasks with a lower oom_score_adj value.
 
-# multi-gen LRU {
 config LRU_GEN
 	bool "Multi-Gen LRU"
 	depends on MMU
-	# make sure page->flags has enough spare bits
 	depends on 64BIT || !SPARSEMEM || SPARSEMEM_VMEMMAP
 	help
 	  A high performance LRU implementation to overcommit memory. See
@@ -875,7 +825,6 @@ config LRU_GEN_STATS
 	  from evicted generations for debugging purpose.
 
 	  This option has a per-memcg and per-node memory overhead.
-# }
 
 endmenu
 
