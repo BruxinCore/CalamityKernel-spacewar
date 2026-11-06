@@ -1,23 +1,14 @@
-# SPDX-License-Identifier: GPL-2.0
-#
-# Makefile for some libs needed in the kernel.
-#
-
 ifdef CONFIG_FUNCTION_TRACER
 ORIG_CFLAGS := $(KBUILD_CFLAGS)
 KBUILD_CFLAGS = $(subst $(CC_FLAGS_FTRACE),,$(ORIG_CFLAGS))
 endif
 
-# These files are disabled because they produce lots of non-interesting and/or
-# flaky coverage that is not a function of syscall inputs. For example,
-# rbtree can be global and individual rotations don't correlate with inputs.
 KCOV_INSTRUMENT_string.o := n
 KCOV_INSTRUMENT_rbtree.o := n
 KCOV_INSTRUMENT_list_debug.o := n
 KCOV_INSTRUMENT_debugobjects.o := n
 KCOV_INSTRUMENT_dynamic_debug.o := n
 
-# Early boot use of cmdline, don't instrument it
 ifdef CONFIG_AMD_MEM_ENCRYPT
 KASAN_SANITIZE_string.o := n
 
@@ -148,6 +139,7 @@ obj-$(CONFIG_LZO_DECOMPRESS) += lzo/
 obj-$(CONFIG_LZ4_COMPRESS) += lz4/
 obj-$(CONFIG_LZ4HC_COMPRESS) += lz4/
 obj-$(CONFIG_LZ4_DECOMPRESS) += lz4/
+obj-$(CONFIG_ZSTD_COMMON) += zstd/
 obj-$(CONFIG_ZSTD_COMPRESS) += zstd/
 obj-$(CONFIG_ZSTD_DECOMPRESS) += zstd/
 obj-$(CONFIG_XZ_DEC) += xz/
@@ -257,9 +249,6 @@ quiet_cmd_crc64 = GEN     $@
 $(obj)/crc64table.h: $(obj)/gen_crc64table
 	$(call cmd,crc64)
 
-#
-# Build a fast OID lookip registry from include/linux/oid_registry.h
-#
 obj-$(CONFIG_OID_REGISTRY) += oid_registry.o
 
 $(obj)/oid_registry.o: $(obj)/oid_registry_data.c
@@ -284,7 +273,6 @@ obj-$(CONFIG_SBITMAP) += sbitmap.o
 
 obj-$(CONFIG_PARMAN) += parman.o
 
-# GCC library routines
 obj-$(CONFIG_GENERIC_LIB_ASHLDI3) += ashldi3.o
 obj-$(CONFIG_GENERIC_LIB_ASHRDI3) += ashrdi3.o
 obj-$(CONFIG_GENERIC_LIB_LSHRDI3) += lshrdi3.o

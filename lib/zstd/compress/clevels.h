@@ -1,0 +1,118 @@
+#ifndef ZSTD_CLEVELS_H
+#define ZSTD_CLEVELS_H
+
+#define ZSTD_STATIC_LINKING_ONLY
+#include <linux/zstd.h>
+
+#define ZSTD_MAX_CLEVEL     22
+
+__attribute__((__unused__))
+
+static const ZSTD_compressionParameters ZSTD_defaultCParameters[4][ZSTD_MAX_CLEVEL+1] = {
+{
+
+    { 19, 12, 13,  1,  6,  1, ZSTD_fast    },
+    { 19, 13, 14,  1,  7,  0, ZSTD_fast    },
+    { 20, 15, 16,  1,  6,  0, ZSTD_fast    },
+    { 21, 16, 17,  1,  5,  0, ZSTD_dfast   },
+    { 21, 18, 18,  1,  5,  0, ZSTD_dfast   },
+    { 21, 18, 19,  3,  5,  2, ZSTD_greedy  },
+    { 21, 18, 19,  3,  5,  4, ZSTD_lazy    },
+    { 21, 19, 20,  4,  5,  8, ZSTD_lazy    },
+    { 21, 19, 20,  4,  5, 16, ZSTD_lazy2   },
+    { 22, 20, 21,  4,  5, 16, ZSTD_lazy2   },
+    { 22, 21, 22,  5,  5, 16, ZSTD_lazy2   },
+    { 22, 21, 22,  6,  5, 16, ZSTD_lazy2   },
+    { 22, 22, 23,  6,  5, 32, ZSTD_lazy2   },
+    { 22, 22, 22,  4,  5, 32, ZSTD_btlazy2 },
+    { 22, 22, 23,  5,  5, 32, ZSTD_btlazy2 },
+    { 22, 23, 23,  6,  5, 32, ZSTD_btlazy2 },
+    { 22, 22, 22,  5,  5, 48, ZSTD_btopt   },
+    { 23, 23, 22,  5,  4, 64, ZSTD_btopt   },
+    { 23, 23, 22,  6,  3, 64, ZSTD_btultra },
+    { 23, 24, 22,  7,  3,256, ZSTD_btultra2},
+    { 25, 25, 23,  7,  3,256, ZSTD_btultra2},
+    { 26, 26, 24,  7,  3,512, ZSTD_btultra2},
+    { 27, 27, 25,  9,  3,999, ZSTD_btultra2},
+},
+{
+
+    { 18, 12, 13,  1,  5,  1, ZSTD_fast    },
+    { 18, 13, 14,  1,  6,  0, ZSTD_fast    },
+    { 18, 14, 14,  1,  5,  0, ZSTD_dfast   },
+    { 18, 16, 16,  1,  4,  0, ZSTD_dfast   },
+    { 18, 16, 17,  3,  5,  2, ZSTD_greedy  },
+    { 18, 17, 18,  5,  5,  2, ZSTD_greedy  },
+    { 18, 18, 19,  3,  5,  4, ZSTD_lazy    },
+    { 18, 18, 19,  4,  4,  4, ZSTD_lazy    },
+    { 18, 18, 19,  4,  4,  8, ZSTD_lazy2   },
+    { 18, 18, 19,  5,  4,  8, ZSTD_lazy2   },
+    { 18, 18, 19,  6,  4,  8, ZSTD_lazy2   },
+    { 18, 18, 19,  5,  4, 12, ZSTD_btlazy2 },
+    { 18, 19, 19,  7,  4, 12, ZSTD_btlazy2 },
+    { 18, 18, 19,  4,  4, 16, ZSTD_btopt   },
+    { 18, 18, 19,  4,  3, 32, ZSTD_btopt   },
+    { 18, 18, 19,  6,  3,128, ZSTD_btopt   },
+    { 18, 19, 19,  6,  3,128, ZSTD_btultra },
+    { 18, 19, 19,  8,  3,256, ZSTD_btultra },
+    { 18, 19, 19,  6,  3,128, ZSTD_btultra2},
+    { 18, 19, 19,  8,  3,256, ZSTD_btultra2},
+    { 18, 19, 19, 10,  3,512, ZSTD_btultra2},
+    { 18, 19, 19, 12,  3,512, ZSTD_btultra2},
+    { 18, 19, 19, 13,  3,999, ZSTD_btultra2},
+},
+{
+
+    { 17, 12, 12,  1,  5,  1, ZSTD_fast    },
+    { 17, 12, 13,  1,  6,  0, ZSTD_fast    },
+    { 17, 13, 15,  1,  5,  0, ZSTD_fast    },
+    { 17, 15, 16,  2,  5,  0, ZSTD_dfast   },
+    { 17, 17, 17,  2,  4,  0, ZSTD_dfast   },
+    { 17, 16, 17,  3,  4,  2, ZSTD_greedy  },
+    { 17, 16, 17,  3,  4,  4, ZSTD_lazy    },
+    { 17, 16, 17,  3,  4,  8, ZSTD_lazy2   },
+    { 17, 16, 17,  4,  4,  8, ZSTD_lazy2   },
+    { 17, 16, 17,  5,  4,  8, ZSTD_lazy2   },
+    { 17, 16, 17,  6,  4,  8, ZSTD_lazy2   },
+    { 17, 17, 17,  5,  4,  8, ZSTD_btlazy2 },
+    { 17, 18, 17,  7,  4, 12, ZSTD_btlazy2 },
+    { 17, 18, 17,  3,  4, 12, ZSTD_btopt   },
+    { 17, 18, 17,  4,  3, 32, ZSTD_btopt   },
+    { 17, 18, 17,  6,  3,256, ZSTD_btopt   },
+    { 17, 18, 17,  6,  3,128, ZSTD_btultra },
+    { 17, 18, 17,  8,  3,256, ZSTD_btultra },
+    { 17, 18, 17, 10,  3,512, ZSTD_btultra },
+    { 17, 18, 17,  5,  3,256, ZSTD_btultra2},
+    { 17, 18, 17,  7,  3,512, ZSTD_btultra2},
+    { 17, 18, 17,  9,  3,512, ZSTD_btultra2},
+    { 17, 18, 17, 11,  3,999, ZSTD_btultra2},
+},
+{
+
+    { 14, 12, 13,  1,  5,  1, ZSTD_fast    },
+    { 14, 14, 15,  1,  5,  0, ZSTD_fast    },
+    { 14, 14, 15,  1,  4,  0, ZSTD_fast    },
+    { 14, 14, 15,  2,  4,  0, ZSTD_dfast   },
+    { 14, 14, 14,  4,  4,  2, ZSTD_greedy  },
+    { 14, 14, 14,  3,  4,  4, ZSTD_lazy    },
+    { 14, 14, 14,  4,  4,  8, ZSTD_lazy2   },
+    { 14, 14, 14,  6,  4,  8, ZSTD_lazy2   },
+    { 14, 14, 14,  8,  4,  8, ZSTD_lazy2   },
+    { 14, 15, 14,  5,  4,  8, ZSTD_btlazy2 },
+    { 14, 15, 14,  9,  4,  8, ZSTD_btlazy2 },
+    { 14, 15, 14,  3,  4, 12, ZSTD_btopt   },
+    { 14, 15, 14,  4,  3, 24, ZSTD_btopt   },
+    { 14, 15, 14,  5,  3, 32, ZSTD_btultra },
+    { 14, 15, 15,  6,  3, 64, ZSTD_btultra },
+    { 14, 15, 15,  7,  3,256, ZSTD_btultra },
+    { 14, 15, 15,  5,  3, 48, ZSTD_btultra2},
+    { 14, 15, 15,  6,  3,128, ZSTD_btultra2},
+    { 14, 15, 15,  7,  3,256, ZSTD_btultra2},
+    { 14, 15, 15,  8,  3,256, ZSTD_btultra2},
+    { 14, 15, 15,  8,  3,512, ZSTD_btultra2},
+    { 14, 15, 15,  9,  3,512, ZSTD_btultra2},
+    { 14, 15, 15, 10,  3,999, ZSTD_btultra2},
+},
+};
+
+#endif

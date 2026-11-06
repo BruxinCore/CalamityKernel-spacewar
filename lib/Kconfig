@@ -1,8 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-only
-#
-# Library configuration
-#
-
 config BINARY_PRINTF
 	def_bool n
 
@@ -261,9 +256,6 @@ config RANDOM32_SELFTEST
 	  This option enables the 32 bit PRNG library functions to perform a
 	  self test on initialization.
 
-#
-# compression support is select'ed if needed
-#
 config 842_COMPRESS
 	select CRC32
 	tristate
@@ -294,20 +286,20 @@ config LZ4HC_COMPRESS
 config LZ4_DECOMPRESS
 	tristate
 
-config ZSTD_COMPRESS
+config ZSTD_COMMON
 	select XXHASH
 	tristate
 
+config ZSTD_COMPRESS
+	select ZSTD_COMMON
+	tristate
+
 config ZSTD_DECOMPRESS
-	select XXHASH
+	select ZSTD_COMMON
 	tristate
 
 source "lib/xz/Kconfig"
 
-#
-# These all provide a common interface (hence the apparent duplication with
-# ZLIB_INFLATE; DECOMPRESS_GZIP is just a wrapper.)
-#
 config DECOMPRESS_GZIP
 	select ZLIB_INFLATE
 	tristate
@@ -330,18 +322,12 @@ config DECOMPRESS_LZ4
 	select LZ4_DECOMPRESS
 	tristate
 
-#
-# Generic allocator support is selected if needed
-#
 config GENERIC_ALLOCATOR
 	bool
 
-#
-# reed solomon support is select'ed if needed
-#
 config REED_SOLOMON
 	tristate
-	
+
 config REED_SOLOMON_ENC8
 	bool
 
@@ -354,9 +340,6 @@ config REED_SOLOMON_ENC16
 config REED_SOLOMON_DEC16
 	bool
 
-#
-# BCH support is selected if needed
-#
 config BCH
 	tristate
 
@@ -393,9 +376,6 @@ config BCH_CONST_T
 	  Drivers should declare a default value for this symbol if
 	  they select option BCH_CONST_PARAMS.
 
-#
-# Textsearch support is select'ed if needed
-#
 config TEXTSEARCH
 	bool
 
@@ -483,12 +463,7 @@ config DQL
 
 config GLOB
 	bool
-#	This actually supports modular compilation, but the module overhead
-#	is ridiculous for the amount of code involved.	Until an out-of-tree
-#	driver asks for it, we'll just link it directly it into the kernel
-#	when required.  Since we're ignoring out-of-tree users,	there's also
-#	no need bother prompting for a manual decision:
-#	prompt "glob_match() function"
+
 	help
 	  This option provides a glob_match function for performing
 	  simple text pattern matching.  It originated in the ATA code
@@ -513,15 +488,9 @@ config GLOB_SELFTEST
 	  module load) by a small amount, so you're welcome to play with
 	  it, but you probably don't need it.
 
-#
-# Netlink attribute parsing support is select'ed if needed
-#
 config NLATTR
 	bool
 
-#
-# Generic 64-bit atomic support is selected if needed
-#
 config GENERIC_ATOMIC64
        bool
 
@@ -561,9 +530,6 @@ config DIMLIB
 	  Implements an algorithm for dynamically changing CQ moderation values
 	  according to run time performance.
 
-#
-# libfdt files, only selected if needed.
-#
 config LIBFDT
 	bool
 
@@ -575,9 +541,6 @@ config OID_REGISTRY
 config UCS2_STRING
         tristate
 
-#
-# generic vdso
-#
 source "lib/vdso/Kconfig"
 
 source "lib/fonts/Kconfig"
@@ -596,17 +559,12 @@ config SG_POOL
 	 selected by a driver or an API which whishes to allocate chained
 	 scatterlist.
 
-#
-# sg chaining option
-#
-
 config ARCH_NO_SG_CHAIN
 	def_bool n
 
 config ARCH_HAS_PMEM_API
 	bool
 
-# use memcpy to implement user copies for nommu architectures
 config UACCESS_MEMCPY
 	bool
 
@@ -616,7 +574,6 @@ config ARCH_HAS_UACCESS_FLUSHCACHE
 config ARCH_HAS_UACCESS_MCSAFE
 	bool
 
-# Temporary. Goes away when all archs are cleaned up
 config ARCH_STACKWALK
        bool
 

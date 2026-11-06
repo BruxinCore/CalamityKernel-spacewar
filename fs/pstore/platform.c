@@ -1,11 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Persistent Storage - platform driver interface parts.
- *
- * Copyright (C) 2007-2008 Google, Inc.
- * Copyright (C) 2010 Intel Corporation <tony.luck@intel.com>
- */
-
 #define pr_fmt(fmt) "pstore: " fmt
 
 #include <linux/atomic.h>
@@ -35,11 +27,6 @@
 
 #include "internal.h"
 
-/*
- * We defer making "oops" entries appear in pstore - see
- * whether the system is actually still running well enough
- * to let someone see the entry
- */
 static int pstore_update_ms = -1;
 module_param_named(update_ms, pstore_update_ms, int, 0600);
 MODULE_PARM_DESC(update_ms, "milliseconds before pstore updates its content "
@@ -47,7 +34,6 @@ MODULE_PARM_DESC(update_ms, "milliseconds before pstore updates its content "
 		 "enabling this option is not safe, it may lead to further "
 		 "corruption on Oopses)");
 
-/* Names should be in the same order as the enum pstore_type_id */
 static const char * const pstore_type_names[] = {
 	"dmesg",
 	"mce",
@@ -68,10 +54,6 @@ static DEFINE_TIMER(pstore_timer, pstore_timefunc);
 static void pstore_dowork(struct work_struct *);
 static DECLARE_WORK(pstore_work, pstore_dowork);
 
-/*
- * pstore_lock just protects "psinfo" during
- * calls to pstore_register()
- */
 static DEFINE_SPINLOCK(pstore_lock);
 struct pstore_info *psinfo;
 
@@ -83,7 +65,6 @@ static char *compress =
 		NULL;
 #endif
 
-/* Compression parameters */
 static struct crypto_comp *tfm;
 
 struct pstore_zbackend {
@@ -94,7 +75,6 @@ struct pstore_zbackend {
 static char *big_oops_buf;
 static size_t big_oops_buf_sz;
 
-/* How much of the console log to snapshot */
 unsigned long kmsg_bytes = PSTORE_DEFAULT_KMSG_BYTES;
 
 void pstore_set_kmsg_bytes(int bytes)
@@ -102,7 +82,6 @@ void pstore_set_kmsg_bytes(int bytes)
 	kmsg_bytes = bytes;
 }
 
-/* Tag each group of saved records with a sequence number */
 static int	oopscount;
 
 const char *pstore_type_to_name(enum pstore_type_id type)
@@ -149,21 +128,16 @@ static const char *get_reason_str(enum kmsg_dump_reason reason)
 	}
 }
 
-/*
- * Should pstore_dump() wait for a concurrent pstore_dump()? If
- * not, the current pstore_dump() will report a failure to dump
- * and return.
- */
 static bool pstore_cannot_wait(enum kmsg_dump_reason reason)
 {
-	/* In NMI path, pstore shouldn't block regardless of reason. */
+
 	if (in_nmi())
 		return true;
 
 	switch (reason) {
-	/* In panic case, other cpus are stopped by smp_send_stop(). */
+
 	case KMSG_DUMP_PANIC:
-	/* Emergency restart shouldn't be blocked. */
+
 	case KMSG_DUMP_EMERG:
 		return true;
 	default:
@@ -177,7 +151,7 @@ static int zbufsize_deflate(size_t size)
 	size_t cmpr;
 
 	switch (size) {
-	/* buffer range for efivars */
+
 	case 1000 ... 2000:
 		cmpr = 56;
 		break;
@@ -187,7 +161,7 @@ static int zbufsize_deflate(size_t size)
 	case 3001 ... 3999:
 		cmpr = 52;
 		break;
-	/* buffer range for nvram, erst */
+
 	case 4000 ... 10000:
 		cmpr = 45;
 		break;
@@ -224,7 +198,7 @@ static int zbufsize_842(size_t size)
 #if IS_ENABLED(CONFIG_PSTORE_ZSTD_COMPRESS)
 static int zbufsize_zstd(size_t size)
 {
-	return ZSTD_compressBound(size);
+	return zstd_compress_bound(size);
 }
 #endif
 
@@ -293,11 +267,9 @@ static void allocate_buf_for_compression(void)
 	int size;
 	char *buf;
 
-	/* Skip if not built-in or compression backend not selected yet. */
 	if (!IS_ENABLED(CONFIG_PSTORE_COMPRESS) || !zbackend)
 		return;
 
-	/* Skip if no pstore backend yet or compression init already done. */
 	if (!psinfo || tfm)
 		return;
 
@@ -328,7 +300,6 @@ static void allocate_buf_for_compression(void)
 		return;
 	}
 
-	/* A non-NULL big_oops_buf indicates compression is available. */
 	tfm = ctx;
 	big_oops_buf_sz = size;
 	big_oops_buf = buf;
@@ -347,13 +318,6 @@ static void free_buf_for_compression(void)
 	big_oops_buf_sz = 0;
 }
 
-/*
- * Called when compression fails, since the printk buffer
- * would be fetched for compression calling it again when
- * compression fails would have moved the iterator of
- * printk buffer which results in fetching old contents.
- * Copy the recent messages from big_oops_buf to psinfo->buf
- */
 static size_t copy_kmsg_to_buffer(int hsize, size_t len)
 {
 	size_t total_len;
@@ -380,14 +344,9 @@ void pstore_record_init(struct pstore_record *record,
 
 	record->psi = psinfo;
 
-	/* Report zeroed timestamp if called before timekeeping has resumed. */
 	record->time = ns_to_timespec64(ktime_get_real_fast_ns());
 }
 
-/*
- * callback from kmsg_dump. Save as much as we can (up to kmsg_bytes) from the
- * end of the buffer.
- */
 static void pstore_dump(struct kmsg_dumper *dumper,
 			enum kmsg_dump_reason reason)
 {
@@ -399,7 +358,7 @@ static void pstore_dump(struct kmsg_dumper *dumper,
 	why = get_reason_str(reason);
 
 	if (down_trylock(&psinfo->buf_lock)) {
-		/* Failed to acquire lock: give up if we cannot wait. */
+
 		if (pstore_cannot_wait(reason)) {
 			pr_err("dump skipped in %s path: may corrupt error record\n",
 				in_nmi() ? "NMI" : why);
@@ -435,12 +394,10 @@ static void pstore_dump(struct kmsg_dumper *dumper,
 			dst_size = psinfo->bufsize;
 		}
 
-		/* Write dump header. */
 		header_size = snprintf(dst, dst_size, "%s#%d Part%u\n", why,
 				 oopscount, part);
 		dst_size -= header_size;
 
-		/* Write dump contents. */
 		if (!kmsg_dump_get_buffer(dumper, true, dst + header_size,
 					  dst_size, &dump_size))
 			break;
@@ -476,9 +433,6 @@ static struct kmsg_dumper pstore_dumper = {
 	.dump = pstore_dump,
 };
 
-/*
- * Register with kmsg_dump to save last part of console log on panic.
- */
 static void pstore_register_kmsg(void)
 {
 	kmsg_dump_register(&pstore_dumper);
@@ -549,13 +503,6 @@ out:
 	return unlikely(ret < 0) ? ret : record->size;
 }
 
-/*
- * platform specific persistent storage driver registers with
- * us here. If pstore is already mounted, call the platform
- * read function right away to populate the file system. If not
- * then the pstore mount code will call us later to fill out
- * the file system.
- */
 int pstore_register(struct pstore_info *psi)
 {
 	struct module *owner = psi->owner;
@@ -565,14 +512,12 @@ int pstore_register(struct pstore_info *psi)
 		return -EPERM;
 	}
 
-	/* Sanity check flags. */
 	if (!psi->flags) {
 		pr_warn("backend '%s' must support at least one frontend\n",
 			psi->name);
 		return -EINVAL;
 	}
 
-	/* Check for required functions. */
 	if (!psi->read || !psi->write) {
 		pr_warn("backend '%s' must implement read() and write()\n",
 			psi->name);
@@ -614,17 +559,12 @@ int pstore_register(struct pstore_info *psi)
 	if (psi->flags & PSTORE_FLAGS_PMSG)
 		pstore_register_pmsg();
 
-	/* Start watching for new records, if desired. */
 	if (pstore_update_ms >= 0) {
 		pstore_timer.expires = jiffies +
 			msecs_to_jiffies(pstore_update_ms);
 		add_timer(&pstore_timer);
 	}
 
-	/*
-	 * Update the module parameter backend, so it is visible
-	 * through /sys/module/pstore/parameters/backend
-	 */
 	backend = psi->name;
 
 	pr_info("Registered %s as persistent store backend\n", psi->name);
@@ -637,7 +577,7 @@ EXPORT_SYMBOL_GPL(pstore_register);
 
 void pstore_unregister(struct pstore_info *psi)
 {
-	/* Stop timer and make sure all work has finished. */
+
 	pstore_update_ms = -1;
 	del_timer_sync(&pstore_timer);
 	flush_work(&pstore_work);
@@ -667,26 +607,22 @@ static void decompress_record(struct pstore_record *record)
 	if (!IS_ENABLED(CONFIG_PSTORE_COMPRESS) || !record->compressed)
 		return;
 
-	/* Only PSTORE_TYPE_DMESG support compression. */
 	if (record->type != PSTORE_TYPE_DMESG) {
 		pr_warn("ignored compressed record type %d\n", record->type);
 		return;
 	}
 
-	/* Missing compression buffer means compression was not initialized. */
 	if (!big_oops_buf) {
 		pr_warn("no decompression method initialized!\n");
 		return;
 	}
 
-	/* Allocate enough space to hold max decompression and ECC. */
 	unzipped_len = big_oops_buf_sz;
 	workspace = kmalloc(unzipped_len + record->ecc_notice_size,
 			    GFP_KERNEL);
 	if (!workspace)
 		return;
 
-	/* After decompression "unzipped_len" is almost certainly smaller. */
 	ret = crypto_comp_decompress(tfm, record->buf, record->size,
 					  workspace, &unzipped_len);
 	if (ret) {
@@ -695,30 +631,21 @@ static void decompress_record(struct pstore_record *record)
 		return;
 	}
 
-	/* Append ECC notice to decompressed buffer. */
 	memcpy(workspace + unzipped_len, record->buf + record->size,
 	       record->ecc_notice_size);
 
-	/* Copy decompressed contents into an minimum-sized allocation. */
 	unzipped = kmemdup(workspace, unzipped_len + record->ecc_notice_size,
 			   GFP_KERNEL);
 	kfree(workspace);
 	if (!unzipped)
 		return;
 
-	/* Swap out compressed contents with decompressed contents. */
 	kfree(record->buf);
 	record->buf = unzipped;
 	record->size = unzipped_len;
 	record->compressed = false;
 }
 
-/*
- * Read all the records from one persistent store backend. Create
- * files in our filesystem.  Don't warn about -EEXIST errors
- * when we are re-scanning the backing store looking to add new
- * error records.
- */
 void pstore_get_backend_records(struct pstore_info *psi,
 				struct dentry *root, int quiet)
 {
@@ -732,11 +659,6 @@ void pstore_get_backend_records(struct pstore_info *psi,
 	if (psi->open && psi->open(psi))
 		goto out;
 
-	/*
-	 * Backend callback read() allocates record.buf. decompress_record()
-	 * may reallocate record.buf. On success, pstore_mkfile() will keep
-	 * the record.buf, so free it only on failure.
-	 */
 	for (; stop_loop; stop_loop--) {
 		struct pstore_record *record;
 		int rc;
@@ -750,7 +672,6 @@ void pstore_get_backend_records(struct pstore_info *psi,
 
 		record->size = psi->read(record);
 
-		/* No more records left in backend? */
 		if (record->size <= 0) {
 			kfree(record);
 			break;
@@ -759,7 +680,7 @@ void pstore_get_backend_records(struct pstore_info *psi,
 		decompress_record(record);
 		rc = pstore_mkfile(root, record);
 		if (rc) {
-			/* pstore_mkfile() did not take record, so free it. */
+
 			kfree(record->buf);
 			kfree(record);
 			if (rc != -EEXIST || !quiet)
@@ -817,11 +738,6 @@ static int __init pstore_init(void)
 
 	pstore_choose_compression();
 
-	/*
-	 * Check if any pstore backends registered earlier but did not
-	 * initialize compression because crypto was not ready. If so,
-	 * initialize compression now.
-	 */
 	allocate_buf_for_compression();
 
 	ret = pstore_init_fs();

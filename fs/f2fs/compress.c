@@ -1,10 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
-/*
- * f2fs compress support
- *
- * Copyright (c) 2019 Chao Yu <chao@kernel.org>
- */
-
 #include <linux/fs.h>
 #include <linux/f2fs_fs.h>
 #include <linux/writeback.h>
@@ -61,7 +54,6 @@ static void f2fs_set_compressed_page(struct page *page,
 	SetPagePrivate(page);
 	set_page_private(page, (unsigned long)data);
 
-	/* i_crypto_info and iv index */
 	page->index = index;
 	page->mapping = inode->i_mapping;
 }
@@ -227,11 +219,6 @@ static int lz4_init_compress_ctx(struct compress_ctx *cc)
 	if (!cc->private)
 		return -ENOMEM;
 
-	/*
-	 * we do not change cc->clen to LZ4_compressBound(inputsize) to
-	 * adapt worst compress case, because lz4 compressor can handle
-	 * output budget properly.
-	 */
 	cc->clen = cc->rlen - PAGE_SIZE - COMPRESS_HEADER_SIZE;
 	return 0;
 }
@@ -291,20 +278,20 @@ static const struct f2fs_compress_ops f2fs_lz4_ops = {
 
 static int zstd_init_compress_ctx(struct compress_ctx *cc)
 {
-	ZSTD_parameters params;
-	ZSTD_CStream *stream;
+	zstd_parameters params;
+	zstd_cstream *stream;
 	void *workspace;
 	unsigned int workspace_size;
 
-	params = ZSTD_getParams(F2FS_ZSTD_DEFAULT_CLEVEL, cc->rlen, 0);
-	workspace_size = ZSTD_CStreamWorkspaceBound(params.cParams);
+	params = zstd_get_params(F2FS_ZSTD_DEFAULT_CLEVEL, cc->rlen);
+	workspace_size = zstd_cstream_workspace_bound(&params.cParams);
 
 	workspace = f2fs_kvmalloc(F2FS_I_SB(cc->inode),
 					workspace_size, GFP_NOFS);
 	if (!workspace)
 		return -ENOMEM;
 
-	stream = ZSTD_initCStream(params, 0, workspace, workspace_size);
+	stream = zstd_init_cstream(&params, 0, workspace, workspace_size);
 	if (!stream) {
 		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initCStream failed\n",
 				KERN_ERR, F2FS_I_SB(cc->inode)->sb->s_id,
@@ -329,9 +316,9 @@ static void zstd_destroy_compress_ctx(struct compress_ctx *cc)
 
 static int zstd_compress_pages(struct compress_ctx *cc)
 {
-	ZSTD_CStream *stream = cc->private2;
-	ZSTD_inBuffer inbuf;
-	ZSTD_outBuffer outbuf;
+	zstd_cstream *stream = cc->private2;
+	zstd_in_buffer inbuf;
+	zstd_out_buffer outbuf;
 	int src_size = cc->rlen;
 	int dst_size = src_size - PAGE_SIZE - COMPRESS_HEADER_SIZE;
 	int ret;
@@ -344,26 +331,22 @@ static int zstd_compress_pages(struct compress_ctx *cc)
 	outbuf.dst = cc->cbuf->cdata;
 	outbuf.size = dst_size;
 
-	ret = ZSTD_compressStream(stream, &outbuf, &inbuf);
-	if (ZSTD_isError(ret)) {
+	ret = zstd_compress_stream(stream, &outbuf, &inbuf);
+	if (zstd_is_error(ret)) {
 		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_compressStream failed, ret: %d\n",
 				KERN_ERR, F2FS_I_SB(cc->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
+				__func__, zstd_get_error_code(ret));
 		return -EIO;
 	}
 
-	ret = ZSTD_endStream(stream, &outbuf);
-	if (ZSTD_isError(ret)) {
+	ret = zstd_end_stream(stream, &outbuf);
+	if (zstd_is_error(ret)) {
 		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_endStream returned %d\n",
 				KERN_ERR, F2FS_I_SB(cc->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
+				__func__, zstd_get_error_code(ret));
 		return -EIO;
 	}
 
-	/*
-	 * there is compressed data remained in intermediate buffer due to
-	 * no more space in cbuf.cdata
-	 */
 	if (ret)
 		return -EAGAIN;
 
@@ -373,18 +356,18 @@ static int zstd_compress_pages(struct compress_ctx *cc)
 
 static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 {
-	ZSTD_DStream *stream;
+	zstd_dstream *stream;
 	void *workspace;
 	unsigned int workspace_size;
 
-	workspace_size = ZSTD_DStreamWorkspaceBound(MAX_COMPRESS_WINDOW_SIZE);
+	workspace_size = zstd_dstream_workspace_bound(MAX_COMPRESS_WINDOW_SIZE);
 
 	workspace = f2fs_kvmalloc(F2FS_I_SB(dic->inode),
 					workspace_size, GFP_NOFS);
 	if (!workspace)
 		return -ENOMEM;
 
-	stream = ZSTD_initDStream(MAX_COMPRESS_WINDOW_SIZE,
+	stream = zstd_init_dstream(MAX_COMPRESS_WINDOW_SIZE,
 					workspace, workspace_size);
 	if (!stream) {
 		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initDStream failed\n",
@@ -409,9 +392,9 @@ static void zstd_destroy_decompress_ctx(struct decompress_io_ctx *dic)
 
 static int zstd_decompress_pages(struct decompress_io_ctx *dic)
 {
-	ZSTD_DStream *stream = dic->private2;
-	ZSTD_inBuffer inbuf;
-	ZSTD_outBuffer outbuf;
+	zstd_dstream *stream = dic->private2;
+	zstd_in_buffer inbuf;
+	zstd_out_buffer outbuf;
 	int ret;
 
 	inbuf.pos = 0;
@@ -422,11 +405,11 @@ static int zstd_decompress_pages(struct decompress_io_ctx *dic)
 	outbuf.dst = dic->rbuf;
 	outbuf.size = dic->rlen;
 
-	ret = ZSTD_decompressStream(stream, &outbuf, &inbuf);
-	if (ZSTD_isError(ret)) {
+	ret = zstd_decompress_stream(stream, &outbuf, &inbuf);
+	if (zstd_is_error(ret)) {
 		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_compressStream failed, ret: %d\n",
 				KERN_ERR, F2FS_I_SB(dic->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
+				__func__, zstd_get_error_code(ret));
 		return -EIO;
 	}
 
@@ -614,7 +597,6 @@ static int f2fs_compress_pages(struct compress_ctx *cc)
 
 	nr_cpages = DIV_ROUND_UP(cc->clen + COMPRESS_HEADER_SIZE, PAGE_SIZE);
 
-	/* zero out any unused part of the last page */
 	memset(&cc->cbuf->cdata[cc->clen], 0,
 	       (nr_cpages * PAGE_SIZE) - (cc->clen + COMPRESS_HEADER_SIZE));
 
@@ -676,7 +658,6 @@ void f2fs_decompress_pages(struct bio *bio, struct page *page, bool verity)
 	trace_f2fs_decompress_pages_start(dic->inode, dic->cluster_idx,
 				dic->cluster_size, fi->i_compress_algorithm);
 
-	/* submit partial compressed pages */
 	if (dic->failed) {
 		ret = -EIO;
 		goto out_free_dic;
@@ -771,7 +752,6 @@ static bool __cluster_may_compress(struct compress_ctx *cc)
 		if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
 			return false;
 
-		/* beyond EOF */
 		if (page->index >= nr_pages)
 			return false;
 	}
@@ -819,13 +799,11 @@ fail:
 	return ret;
 }
 
-/* return # of compressed blocks in compressed cluster */
 static int f2fs_compressed_blocks(struct compress_ctx *cc)
 {
 	return __f2fs_cluster_blocks(cc, true);
 }
 
-/* return # of valid blocks in compressed cluster */
 static int f2fs_cluster_blocks(struct compress_ctx *cc, bool compr)
 {
 	return __f2fs_cluster_blocks(cc, false);
@@ -897,7 +875,6 @@ retry:
 	if (ret)
 		return ret;
 
-	/* keep page reference to avoid page reclaim */
 	for (i = 0; i < cc->cluster_size; i++) {
 		page = f2fs_pagecache_get_page(mapping, start_idx + i,
 							fgp_flag, GFP_NOFS);
@@ -1010,15 +987,12 @@ int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock)
 	if (err < 0)
 		return err;
 
-	/* truncate normal cluster */
 	if (!err)
 		return f2fs_do_truncate_blocks(inode, from, lock);
 
-	/* truncate compressed cluster */
 	err = f2fs_prepare_compress_overwrite(inode, &pagep,
 						start_idx, &fsdata);
 
-	/* should not be a normal cluster */
 	f2fs_bug_on(F2FS_I_SB(inode), err == 0);
 
 	if (err <= 0)
@@ -1140,7 +1114,6 @@ static int f2fs_write_compressed_pages(struct compress_ctx *cc,
 		fio.page = cc->rpages[i];
 		fio.old_blkaddr = blkaddr;
 
-		/* cluster header */
 		if (i == 0) {
 			if (blkaddr == COMPRESS_ADDR)
 				fio.compr_blocks++;
@@ -1278,11 +1251,7 @@ retry_write:
 				unlock_page(cc->rpages[i]);
 				ret = 0;
 			} else if (ret == -EAGAIN) {
-				/*
-				 * for quota file, just redirty left pages to
-				 * avoid deadlock caused by cluster update race
-				 * from foreground operation.
-				 */
+
 				if (IS_NOQUOTA(cc->inode)) {
 					err = 0;
 					goto out_err;
