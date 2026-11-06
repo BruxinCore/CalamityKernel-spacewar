@@ -1,31 +1,3 @@
-/*
- * Aug 8, 2011 Bob Pearson with help from Joakim Tjernlund and George Spelvin
- * cleaned up code to current version of sparse and added the slicing-by-8
- * algorithm to the closely similar existing slicing-by-4 algorithm.
- *
- * Oct 15, 2000 Matt Domsch <Matt_Domsch@dell.com>
- * Nicer crc32 functions/docs submitted by linux@horizon.com.  Thanks!
- * Code was from the public domain, copyright abandoned.  Code was
- * subsequently included in the kernel, thus was re-licensed under the
- * GNU GPL v2.
- *
- * Oct 12, 2000 Matt Domsch <Matt_Domsch@dell.com>
- * Same crc32 function was used in 5 other places in the kernel.
- * I made one version, and deleted the others.
- * There are various incantations of crc32().  Some use a seed of 0 or ~0.
- * Some xor at the end with ~0.  The generic crc32() function takes
- * seed as an argument, and doesn't xor at the end.  Then individual
- * users can do whatever they need.
- *   drivers/net/smc9194.c uses seed ~0, doesn't xor with ~0.
- *   fs/jffs2 uses seed 0, doesn't xor with ~0.
- *   fs/partitions/efi.c uses seed ~0, xor's with ~0.
- *
- * This source code is licensed under the GNU General Public License,
- * Version 2.  See the file COPYING for more details.
- */
-
-/* see: Documentation/crc32.txt for a description of algorithms */
-
 #include <linux/crc32.h>
 #include <linux/crc32poly.h>
 #include <linux/module.h>
@@ -53,7 +25,6 @@ MODULE_LICENSE("GPL");
 
 #if CRC_LE_BITS > 8 || CRC_BE_BITS > 8
 
-/* implements slicing-by-4 or slicing-by-8 algorithm */
 static inline u32 __pure
 crc32_body(u32 crc, unsigned char const *buf, size_t len, const u32 (*tab)[256])
 {
@@ -81,7 +52,6 @@ crc32_body(u32 crc, unsigned char const *buf, size_t len, const u32 (*tab)[256])
 # endif
 	u32 q;
 
-	/* Align it */
 	if (unlikely((long)buf & 3 && len)) {
 		do {
 			DO_CRC(*buf++);
@@ -103,7 +73,7 @@ crc32_body(u32 crc, unsigned char const *buf, size_t len, const u32 (*tab)[256])
 # else
 	for (--b; len; --len) {
 # endif
-		q = crc ^ *++b; /* use pre increment for speed */
+		q = crc ^ *++b;
 # if CRC_LE_BITS == 32
 		crc = DO_CRC4;
 # else
@@ -113,15 +83,15 @@ crc32_body(u32 crc, unsigned char const *buf, size_t len, const u32 (*tab)[256])
 # endif
 	}
 	len = rem_len;
-	/* And the last few bytes */
+
 	if (len) {
 		u8 *p = (u8 *)(b + 1) - 1;
 # ifdef CONFIG_X86
 		for (i = 0; i < len; i++)
-			DO_CRC(*++p); /* use pre increment for speed */
+			DO_CRC(*++p);
 # else
 		do {
-			DO_CRC(*++p); /* use pre increment for speed */
+			DO_CRC(*++p);
 		} while (--len);
 # endif
 	}
@@ -132,17 +102,6 @@ crc32_body(u32 crc, unsigned char const *buf, size_t len, const u32 (*tab)[256])
 }
 #endif
 
-
-/**
- * crc32_le_generic() - Calculate bitwise little-endian Ethernet AUTODIN II
- *			CRC32/CRC32C
- * @crc: seed value for computation.  ~0 for Ethernet, sometimes 0 for other
- *	 uses, or the previous crc32/crc32c value if computing incrementally.
- * @p: pointer to buffer over which CRC32/CRC32C is run
- * @len: length of buffer @p
- * @tab: little-endian Ethernet table
- * @polynomial: CRC32/CRC32c LE polynomial
- */
 static inline u32 __pure crc32_le_generic(u32 crc, unsigned char const *p,
 					  size_t len, const u32 (*tab)[256],
 					  u32 polynomial)
@@ -169,7 +128,7 @@ static inline u32 __pure crc32_le_generic(u32 crc, unsigned char const *p,
 		crc = (crc >> 4) ^ tab[0][crc & 15];
 	}
 # elif CRC_LE_BITS == 8
-	/* aka Sarwate algorithm */
+
 	while (len--) {
 		crc ^= *p++;
 		crc = (crc >> 8) ^ tab[0][crc & 255];
@@ -209,11 +168,6 @@ EXPORT_SYMBOL(__crc32c_le);
 u32 __pure crc32_le_base(u32, unsigned char const *, size_t) __alias(crc32_le);
 u32 __pure __crc32c_le_base(u32, unsigned char const *, size_t) __alias(__crc32c_le);
 
-/*
- * This multiplies the polynomials x and y modulo the given modulus.
- * This follows the "little-endian" CRC convention that the lsbit
- * represents the highest power of x, and the msbit represents x^0.
- */
 static u32 __attribute_const__ gf2_multiply(u32 x, u32 y, u32 modulus)
 {
 	u32 product = x & 1 ? y : 0;
@@ -228,25 +182,12 @@ static u32 __attribute_const__ gf2_multiply(u32 x, u32 y, u32 modulus)
 	return product;
 }
 
-/**
- * crc32_generic_shift - Append @len 0 bytes to crc, in logarithmic time
- * @crc: The original little-endian CRC (i.e. lsbit is x^31 coefficient)
- * @len: The number of bytes. @crc is multiplied by x^(8*@len)
- * @polynomial: The modulus used to reduce the result to 32 bits.
- *
- * It's possible to parallelize CRC computations by computing a CRC
- * over separate ranges of a buffer, then summing them.
- * This shifts the given CRC by 8*len bits (i.e. produces the same effect
- * as appending len bytes of zero to the data), in time proportional
- * to log(len).
- */
 static u32 __attribute_const__ crc32_generic_shift(u32 crc, size_t len,
 						   u32 polynomial)
 {
-	u32 power = polynomial;	/* CRC of x^32 */
+	u32 power = polynomial;
 	int i;
 
-	/* Shift up to 32 bits in the simple linear way */
 	for (i = 0; i < 8 * (int)(len & 3); i++)
 		crc = (crc >> 1) ^ (crc & 1 ? polynomial : 0);
 
@@ -255,7 +196,7 @@ static u32 __attribute_const__ crc32_generic_shift(u32 crc, size_t len,
 		return crc;
 
 	for (;;) {
-		/* "power" is x^(2^i), modulo the polynomial */
+
 		if (len & 1)
 			crc = gf2_multiply(crc, power, polynomial);
 
@@ -263,7 +204,6 @@ static u32 __attribute_const__ crc32_generic_shift(u32 crc, size_t len,
 		if (!len)
 			break;
 
-		/* Square power, advancing to x^(2^(i+1)) */
 		power = gf2_multiply(power, power, polynomial);
 	}
 
@@ -282,15 +222,6 @@ u32 __attribute_const__ __crc32c_le_shift(u32 crc, size_t len)
 EXPORT_SYMBOL(crc32_le_shift);
 EXPORT_SYMBOL(__crc32c_le_shift);
 
-/**
- * crc32_be_generic() - Calculate bitwise big-endian Ethernet AUTODIN II CRC32
- * @crc: seed value for computation.  ~0 for Ethernet, sometimes 0 for
- *	other uses, or the previous crc32 value if computing incrementally.
- * @p: pointer to buffer over which CRC32 is run
- * @len: length of buffer @p
- * @tab: big-endian Ethernet table
- * @polynomial: CRC32 BE polynomial
- */
 static inline u32 __pure crc32_be_generic(u32 crc, unsigned char const *p,
 					  size_t len, const u32 (*tab)[256],
 					  u32 polynomial)
@@ -332,15 +263,16 @@ static inline u32 __pure crc32_be_generic(u32 crc, unsigned char const *p,
 }
 
 #if CRC_BE_BITS == 1
-u32 __pure crc32_be(u32 crc, unsigned char const *p, size_t len)
+u32 __pure __weak crc32_be(u32 crc, unsigned char const *p, size_t len)
 {
 	return crc32_be_generic(crc, p, len, NULL, CRC32_POLY_BE);
 }
 #else
-u32 __pure crc32_be(u32 crc, unsigned char const *p, size_t len)
+u32 __pure __weak crc32_be(u32 crc, unsigned char const *p, size_t len)
 {
 	return crc32_be_generic(crc, p, len,
 			(const u32 (*)[256])crc32table_be, CRC32_POLY_BE);
 }
 #endif
 EXPORT_SYMBOL(crc32_be);
+u32 __pure crc32_be_base(u32, unsigned char const *, size_t) __alias(crc32_be);
