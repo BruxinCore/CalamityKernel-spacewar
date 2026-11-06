@@ -4399,7 +4399,12 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	if (!count)
 		return IRQ_NONE;
 
-	/* Controller is halted; ignore new/pending events */
+	if (count > evt->length) {
+		dev_err_ratelimited(dwc->dev, "invalid count(%u) > evt->length(%u)\n",
+			count, evt->length);
+		return IRQ_NONE;
+	}
+
 	if (!dwc->pullups_connected) {
 		dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), count);
 		dbg_event(0xFF, "NO_PULLUP", count);
