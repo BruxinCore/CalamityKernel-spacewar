@@ -1,6 +1,5 @@
-# AnyKernel3 package for Nothing Phone (1)
 properties() { '
-kernel.string=Caly-Rice-Beta by BruxinCore
+kernel.string=Caly-Rice-Stable by BruxinCore
 do.devicecheck=1
 do.modules=0
 do.systemless=1

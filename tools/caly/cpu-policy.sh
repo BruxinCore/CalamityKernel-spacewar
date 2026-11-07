@@ -32,7 +32,7 @@ case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop
   *Spacewar*|*spacewar*) ;;
   *) exit 1 ;;
 esac
-case "$(uname -r)" in 5.4.*-qgki-Caly-Rice-Beta) ;; *) exit 1 ;; esac
+case "$(uname -r)" in 5.4.*-qgki-Caly-Rice-Stable|5.4.*-qgki-Caly-Rice-Beta) ;; *) exit 1 ;; esac
 [ "$(getprop sys.boot_completed)" = 1 ] || exit 1
 base=/dev/cpuctl/top-app
 for name in cpu.uclamp.min cpu.uclamp.max cpu.uclamp.latency_sensitive; do
