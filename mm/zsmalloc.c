@@ -280,6 +280,8 @@ static int zs_zpool_malloc(void *pool, size_t size, gfp_t gfp,
 
 	if (IS_ERR_VALUE(*handle))
 		return PTR_ERR((void *)*handle);
+	if (!*handle)
+		return -ENOMEM;
 	return 0;
 }
 static void zs_zpool_free(void *pool, unsigned long handle)
@@ -1125,11 +1127,11 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 	struct zspage *zspage;
 
 	if (unlikely(!size || size > ZS_MAX_ALLOC_SIZE))
-		return (unsigned long)ERR_PTR(-EINVAL);
+		return 0;
 
 	handle = cache_alloc_handle(pool, gfp);
 	if (!handle)
-		return (unsigned long)ERR_PTR(-ENOMEM);
+		return 0;
 
 	size += ZS_HANDLE_SIZE;
 	class = pool->size_class[get_size_class_index(size)];
@@ -1151,7 +1153,7 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 	zspage = alloc_zspage(pool, class, gfp);
 	if (!zspage) {
 		cache_free_handle(pool, handle);
-		return (unsigned long)ERR_PTR(-ENOMEM);
+		return 0;
 	}
 
 	spin_lock(&pool->lock);

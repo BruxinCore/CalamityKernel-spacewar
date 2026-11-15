@@ -1273,7 +1273,7 @@ compress_again:
 	if (comp_len >= huge_class_size)
 		comp_len = PAGE_SIZE;
 
-	if (!handle)
+	if (IS_ERR_OR_NULL((void *)handle))
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				__GFP_KSWAPD_RECLAIM |
 				__GFP_NOWARN |
@@ -1281,14 +1281,14 @@ compress_again:
 				__GFP_MOVABLE |
 				__GFP_CMA |
 				__GFP_OFFLINABLE);
-	if (!handle) {
+	if (IS_ERR_OR_NULL((void *)handle)) {
 		zcomp_stream_put(zram->comp);
 		atomic64_inc(&zram->stats.writestall);
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				GFP_NOIO | __GFP_HIGHMEM |
 				__GFP_MOVABLE | __GFP_CMA |
 				__GFP_OFFLINABLE);
-		if (handle)
+		if (!IS_ERR_OR_NULL((void *)handle))
 			goto compress_again;
 		return -ENOMEM;
 	}
