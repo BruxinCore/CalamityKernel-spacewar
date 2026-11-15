@@ -108,9 +108,13 @@ static void release_rq_locks_irqrestore(const cpumask_t *cpus,
 }
 
 unsigned int sysctl_sched_capacity_margin_up[MAX_MARGIN_LEVELS] = {
-			[0 ... MAX_MARGIN_LEVELS-1] = 1078}; /* ~5% margin */
+	[0] = 1365,
+	[1 ... MAX_MARGIN_LEVELS-1] = 1204
+};
 unsigned int sysctl_sched_capacity_margin_down[MAX_MARGIN_LEVELS] = {
-			[0 ... MAX_MARGIN_LEVELS-1] = 1205}; /* ~15% margin */
+	[0] = 1861,
+	[1 ... MAX_MARGIN_LEVELS-1] = 1462
+};
 
 unsigned int sysctl_walt_cpu_high_irqload = 95;
 static unsigned int walt_cpu_high_irqload;
@@ -2321,20 +2325,11 @@ void mark_task_starting(struct task_struct *p)
 	update_task_cpu_cycles(p, cpu_of(rq), wallclock);
 }
 
-/*
- * Task groups whose aggregate demand on a cpu is more than
- * sched_group_upmigrate need to be up-migrated if possible.
- */
-unsigned int __read_mostly sched_group_upmigrate = 20000000;
-unsigned int __read_mostly sysctl_sched_group_upmigrate_pct = 100;
+unsigned int __read_mostly sched_group_upmigrate = 17000000;
+unsigned int __read_mostly sysctl_sched_group_upmigrate_pct = 85;
 
-/*
- * Task groups, once up-migrated, will need to drop their aggregate
- * demand to less than sched_group_downmigrate before they are "down"
- * migrated.
- */
-unsigned int __read_mostly sched_group_downmigrate = 19000000;
-unsigned int __read_mostly sysctl_sched_group_downmigrate_pct = 95;
+unsigned int __read_mostly sched_group_downmigrate = 13000000;
+unsigned int __read_mostly sysctl_sched_group_downmigrate_pct = 65;
 
 static inline void walt_update_group_thresholds(void)
 {

@@ -49,9 +49,9 @@ static struct workqueue_struct *cpu_boost_wq;
 
 static struct work_struct input_boost_work;
 
-static bool input_boost_enabled;
+static bool input_boost_enabled = true;
 
-static unsigned int input_boost_ms = 40;
+static unsigned int input_boost_ms = 96;
 show_one(input_boost_ms);
 store_one(input_boost_ms);
 cpu_boost_attr_rw(input_boost_ms);
@@ -65,7 +65,7 @@ static bool sched_boost_active;
 
 static struct delayed_work input_boost_rem;
 static u64 last_input_time;
-#define MIN_INPUT_INTERVAL (150 * USEC_PER_MSEC)
+#define MIN_INPUT_INTERVAL (64 * USEC_PER_MSEC)
 
 static DEFINE_PER_CPU(struct freq_qos_request, qos_req);
 
@@ -164,7 +164,6 @@ static void update_policy_online(void)
 	unsigned int i;
 	struct cpufreq_policy *policy;
 	struct cpumask online_cpus;
-	/* Re-evaluate policy to trigger adjust notifier for online CPUs */
 	get_online_cpus();
 	online_cpus = *cpu_online_mask;
 	for_each_cpu(i, &online_cpus) {
@@ -172,12 +171,14 @@ static void update_policy_online(void)
 		if (!policy) {
 			pr_err("%s: cpufreq policy not found for cpu%d\n",
 							__func__, i);
+			put_online_cpus();
 			return;
 		}
 
 		cpumask_andnot(&online_cpus, &online_cpus,
 						policy->related_cpus);
 		boost_adjust_notify(policy);
+		cpufreq_cpu_put(policy);
 	}
 	put_online_cpus();
 }
@@ -337,7 +338,7 @@ int cpu_boost_init(void)
 	struct cpufreq_policy *policy;
 	struct freq_qos_request *req;
 
-	cpu_boost_wq = alloc_workqueue("cpuboost_wq", WQ_HIGHPRI, 0);
+	cpu_boost_wq = alloc_workqueue("cpuboost_wq", WQ_HIGHPRI | WQ_UNBOUND, 0);
 	if (!cpu_boost_wq)
 		return -EFAULT;
 
@@ -347,6 +348,12 @@ int cpu_boost_init(void)
 	for_each_possible_cpu(cpu) {
 		s = &per_cpu(sync_info, cpu);
 		s->cpu = cpu;
+		if (cpu < 4)
+			s->input_boost_freq = 1324800;
+		else if (cpu < 7)
+			s->input_boost_freq = 1555200;
+		else
+			s->input_boost_freq = 1651200;
 		req = &per_cpu(qos_req, cpu);
 		policy = cpufreq_cpu_get(cpu);
 		if (!policy) {
@@ -357,12 +364,12 @@ int cpu_boost_init(void)
 
 		ret = freq_qos_add_request(&policy->constraints, req,
 						FREQ_QOS_MIN, policy->min);
+		cpufreq_cpu_put(policy);
 		if (ret < 0) {
 			pr_err("%s: Failed to add freq constraint (%d)\n",
 							__func__, ret);
 			return ret;
 		}
-
 	}
 
 	cpu_boost_kobj = kobject_create_and_add("cpu_boost",

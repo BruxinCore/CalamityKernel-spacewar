@@ -785,6 +785,9 @@ static void adreno_of_get_initial_pwrlevel(struct kgsl_pwrctrl *pwr,
 	if (init_level < 0 || init_level >= pwr->num_pwrlevels)
 		init_level = 1;
 
+	if (pwr->num_pwrlevels > 2 && init_level > 2)
+		init_level = 2;
+
 	pwr->active_pwrlevel = init_level;
 	pwr->default_pwrlevel = init_level;
 }
