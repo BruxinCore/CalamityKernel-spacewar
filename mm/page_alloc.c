@@ -6281,15 +6281,10 @@ static int zone_batchsize(struct zone *zone)
 #ifdef CONFIG_MMU
 	int batch;
 
-	/*
-	 * The per-cpu-pages pools are set to around 1000th of the
-	 * size of the zone.
-	 */
-	batch = zone_managed_pages(zone) / 1024;
-	/* But no more than a meg. */
-	if (batch * PAGE_SIZE > 1024 * 1024)
-		batch = (1024 * 1024) / PAGE_SIZE;
-	batch /= 4;		/* We effectively *= 4 below */
+	batch = zone_managed_pages(zone) / 512;
+	if (batch * PAGE_SIZE > 2048 * 1024)
+		batch = (2048 * 1024) / PAGE_SIZE;
+	batch /= 4;
 	if (batch < 1)
 		batch = 1;
 
@@ -6352,10 +6347,9 @@ static void pageset_update(struct per_cpu_pages *pcp, unsigned long high,
 	pcp->batch = batch;
 }
 
-/* a companion to pageset_set_high() */
 static void pageset_set_batch(struct per_cpu_pageset *p, unsigned long batch)
 {
-	pageset_update(&p->pcp, 6 * batch, max(1UL, 1 * batch));
+	pageset_update(&p->pcp, 16 * batch, max(1UL, 2 * batch));
 }
 
 static void pageset_init(struct per_cpu_pageset *p)
