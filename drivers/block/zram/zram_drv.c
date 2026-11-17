@@ -27,7 +27,7 @@ static DEFINE_IDR(zram_index_idr);
 static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
-static const char *default_compressor = "lzo-rle";
+static const char *default_compressor = "lz4";
 
 static unsigned int num_devices = 1;
 
@@ -936,6 +936,9 @@ static ssize_t comp_algorithm_store(struct device *dev,
 	if (sz > 0 && compressor[sz - 1] == '\n')
 		compressor[sz - 1] = 0x00;
 
+	if (!strcmp(compressor, "lzo") || !strcmp(compressor, "lzo-rle"))
+		strlcpy(compressor, "lz4", sizeof(compressor));
+
 	if (!zcomp_available_algorithm(compressor))
 		return -EINVAL;
 
@@ -1241,25 +1244,22 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	unsigned long alloced_pages;
 	unsigned long handle = 0;
 	unsigned int comp_len = 0;
-	void *src, *dst, *mem;
-	struct zcomp_strm *zstrm;
+	void *src, *dst;
+	struct zcomp_strm *zstrm = NULL;
 	struct page *page = bvec->bv_page;
 	unsigned long element = 0;
 	enum zram_pageflags flags = 0;
 
-	mem = kmap_atomic(page);
-	if (page_same_filled(mem, &element)) {
-		kunmap_atomic(mem);
-
+compress_again:
+	zstrm = zcomp_stream_get(zram->comp);
+	src = kmap_atomic(page);
+	if (page_same_filled(src, &element)) {
+		kunmap_atomic(src);
+		zcomp_stream_put(zram->comp);
 		flags = ZRAM_SAME;
 		atomic64_inc(&zram->stats.same_pages);
 		goto out;
 	}
-	kunmap_atomic(mem);
-
-compress_again:
-	zstrm = zcomp_stream_get(zram->comp);
-	src = kmap_atomic(page);
 	ret = zcomp_compress(zstrm, src, &comp_len);
 	kunmap_atomic(src);
 
@@ -1270,8 +1270,11 @@ compress_again:
 		return ret;
 	}
 
-	if (comp_len >= huge_class_size)
+	if (comp_len >= huge_class_size) {
+		zcomp_stream_put(zram->comp);
+		zstrm = NULL;
 		comp_len = PAGE_SIZE;
+	}
 
 	if (IS_ERR_OR_NULL((void *)handle))
 		handle = zs_malloc(zram->mem_pool, comp_len,
@@ -1282,36 +1285,43 @@ compress_again:
 				__GFP_CMA |
 				__GFP_OFFLINABLE);
 	if (IS_ERR_OR_NULL((void *)handle)) {
-		zcomp_stream_put(zram->comp);
+		if (zstrm) {
+			zcomp_stream_put(zram->comp);
+			zstrm = NULL;
+		}
 		atomic64_inc(&zram->stats.writestall);
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				GFP_NOIO | __GFP_HIGHMEM |
 				__GFP_MOVABLE | __GFP_CMA |
 				__GFP_OFFLINABLE);
-		if (!IS_ERR_OR_NULL((void *)handle))
-			goto compress_again;
-		return -ENOMEM;
+		if (!IS_ERR_OR_NULL((void *)handle)) {
+			if (comp_len != PAGE_SIZE)
+				goto compress_again;
+		} else {
+			return -ENOMEM;
+		}
 	}
 
 	alloced_pages = zs_get_total_pages(zram->mem_pool);
 	update_used_max(zram, alloced_pages);
 
 	if (zram->limit_pages && alloced_pages > zram->limit_pages) {
-		zcomp_stream_put(zram->comp);
+		if (zstrm)
+			zcomp_stream_put(zram->comp);
 		zs_free(zram->mem_pool, handle);
 		return -ENOMEM;
 	}
 
 	dst = zs_map_object(zram->mem_pool, handle, ZS_MM_WO);
 
-	src = zstrm->buffer;
-	if (comp_len == PAGE_SIZE)
+	if (comp_len == PAGE_SIZE) {
 		src = kmap_atomic(page);
-	memcpy(dst, src, comp_len);
-	if (comp_len == PAGE_SIZE)
+		memcpy(dst, src, comp_len);
 		kunmap_atomic(src);
-
-	zcomp_stream_put(zram->comp);
+	} else {
+		memcpy(dst, zstrm->buffer, comp_len);
+		zcomp_stream_put(zram->comp);
+	}
 	zs_unmap_object(zram->mem_pool, handle);
 	atomic64_add(comp_len, &zram->stats.compr_data_size);
 out:
