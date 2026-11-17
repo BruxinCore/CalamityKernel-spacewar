@@ -1001,6 +1001,10 @@ asmlinkage long sys_fsconfig(int fs_fd, unsigned int cmd, const char __user *key
 			     const void __user *value, int aux);
 asmlinkage long sys_fsmount(int fs_fd, unsigned int flags, unsigned int ms_flags);
 asmlinkage long sys_fspick(int dfd, const char __user *path, unsigned int flags);
+struct futex_waitv;
+asmlinkage long sys_futex_waitv(struct futex_waitv __user *waiters,
+				unsigned int nr_futexes, unsigned int flags,
+				struct __kernel_timespec __user *timeout, clockid_t clockid);
 asmlinkage long sys_pidfd_send_signal(int pidfd, int sig,
 				       siginfo_t __user *info,
 				       unsigned int flags);

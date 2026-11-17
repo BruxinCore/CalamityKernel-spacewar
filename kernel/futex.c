@@ -3949,6 +3949,214 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 	return do_futex(uaddr, op, val, tp, uaddr2, val2, val3);
 }
 
+struct futex_vector {
+	struct futex_q q;
+	u64 val;
+	u64 uaddr;
+	unsigned int flags;
+	bool woken;
+};
+
+static int futex_parse_waitv(struct futex_vector *vs,
+			     struct futex_waitv __user *uwaitv,
+			     unsigned int nr_futexes)
+{
+	struct futex_waitv aux;
+	unsigned int i;
+
+	for (i = 0; i < nr_futexes; i++) {
+		if (copy_from_user(&aux, &uwaitv[i], sizeof(aux)))
+			return -EFAULT;
+
+		if ((aux.flags & ~(FUTEX_32 | FUTEX_PRIVATE_FLAG)) ||
+		    !(aux.flags & FUTEX_32) || aux.__reserved)
+			return -EINVAL;
+
+		if ((aux.uaddr & (sizeof(u32) - 1)) || (aux.val >> 32))
+			return -EINVAL;
+
+		vs[i].flags = (aux.flags & FUTEX_PRIVATE_FLAG) ? 0 : FLAGS_SHARED;
+		vs[i].q = futex_q_init;
+		vs[i].uaddr = aux.uaddr;
+		vs[i].val = aux.val;
+		vs[i].woken = false;
+	}
+
+	return 0;
+}
+
+static int futex_unqueue_multiple(struct futex_vector *v, int count)
+{
+	int ret = -1;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (!unqueue_me(&v[i].q))
+			ret = i;
+	}
+
+	return ret;
+}
+
+static int futex_wait_multiple_setup(struct futex_vector *vs, int count,
+				     int *woken)
+{
+	struct futex_hash_bucket *hb;
+	int ret, i;
+	u32 uval;
+
+retry:
+	for (i = 0; i < count; i++) {
+		u32 __user *uaddr = u64_to_user_ptr(vs[i].uaddr);
+
+		if (i)
+			vs[i].q = futex_q_init;
+
+		ret = get_futex_key(uaddr, vs[i].flags & FLAGS_SHARED,
+				    &vs[i].q.key, FUTEX_READ);
+		if (unlikely(ret != 0)) {
+			if (i > 0) {
+				*woken = futex_unqueue_multiple(vs, i);
+				__set_current_state(TASK_RUNNING);
+			}
+			return (*woken >= 0) ? 1 : ret;
+		}
+
+		set_current_state(TASK_INTERRUPTIBLE);
+		hb = queue_lock(&vs[i].q);
+		ret = get_futex_value_locked(&uval, uaddr);
+
+		if (!ret && uval == (u32)vs[i].val) {
+			queue_me(&vs[i].q, hb);
+			continue;
+		}
+
+		queue_unlock(hb);
+		__set_current_state(TASK_RUNNING);
+		put_futex_key(&vs[i].q.key);
+
+		if (i > 0)
+			*woken = futex_unqueue_multiple(vs, i);
+
+		if (ret) {
+			ret = get_user(uval, uaddr);
+			if (ret)
+				return (*woken >= 0) ? 1 : ret;
+			if (*woken >= 0)
+				return 1;
+			goto retry;
+		}
+
+		return (*woken >= 0) ? 1 : -EWOULDBLOCK;
+	}
+
+	if (unlikely(signal_pending(current))) {
+		*woken = futex_unqueue_multiple(vs, count);
+		__set_current_state(TASK_RUNNING);
+		return (*woken >= 0) ? 1 : -ERESTARTSYS;
+	}
+
+	return 0;
+}
+
+static int futex_wait_multiple(struct futex_vector *vs, unsigned int count,
+			       struct hrtimer_sleeper *to)
+{
+	int ret, hint = -1;
+
+	if (to)
+		hrtimer_sleeper_start_expires(to, HRTIMER_MODE_ABS);
+
+	while (1) {
+		ret = futex_wait_multiple_setup(vs, count, &hint);
+		if (ret) {
+			if (ret > 0)
+				ret = hint;
+			return ret;
+		}
+
+		if (to && !to->task) {
+			__set_current_state(TASK_RUNNING);
+			break;
+		}
+
+		freezable_schedule();
+		__set_current_state(TASK_RUNNING);
+
+		ret = futex_unqueue_multiple(vs, count);
+		if (ret >= 0)
+			return ret;
+
+		if (to && !to->task)
+			return -ETIMEDOUT;
+
+		if (signal_pending(current))
+			return -ERESTARTSYS;
+	}
+
+	ret = futex_unqueue_multiple(vs, count);
+	if (ret >= 0)
+		return ret;
+
+	return -ETIMEDOUT;
+}
+
+SYSCALL_DEFINE5(futex_waitv, struct futex_waitv __user *, waiters,
+		unsigned int, nr_futexes, unsigned int, flags,
+		struct __kernel_timespec __user *, timeout, clockid_t, clockid)
+{
+	struct hrtimer_sleeper to, *top = NULL;
+	struct futex_vector *futex_v;
+	struct timespec64 ts;
+	ktime_t kt;
+	int ret;
+
+	if (flags)
+		return -EINVAL;
+
+	if (!nr_futexes || nr_futexes > FUTEX_WAITV_MAX || !waiters)
+		return -EINVAL;
+
+	if (timeout) {
+		int flag_clk = 0;
+
+		if (clockid == CLOCK_REALTIME) {
+			flag_clk = FLAGS_CLOCKRT;
+		} else if (clockid != CLOCK_MONOTONIC) {
+			return -EINVAL;
+		}
+
+		if (get_timespec64(&ts, timeout))
+			return -EFAULT;
+
+		if (!timespec64_valid(&ts))
+			return -EINVAL;
+
+		kt = timespec64_to_ktime(ts);
+		top = futex_setup_timer(&kt, &to, FLAGS_HAS_TIMEOUT | flag_clk,
+					current->timer_slack_ns);
+	}
+
+	futex_v = kcalloc(nr_futexes, sizeof(*futex_v), GFP_KERNEL);
+	if (!futex_v) {
+		ret = -ENOMEM;
+		goto out_timer;
+	}
+
+	ret = futex_parse_waitv(futex_v, waiters, nr_futexes);
+	if (!ret)
+		ret = futex_wait_multiple(futex_v, nr_futexes, top);
+
+	kfree(futex_v);
+
+out_timer:
+	if (top) {
+		hrtimer_cancel(&top->timer);
+		destroy_hrtimer_on_stack(&top->timer);
+	}
+	return ret;
+}
+
 #ifdef CONFIG_COMPAT
 /*
  * Fetch a robust-list pointer. Bit 0 signals PI futexes:

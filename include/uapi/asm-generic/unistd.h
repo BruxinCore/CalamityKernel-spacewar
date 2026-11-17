@@ -852,9 +852,11 @@ __SYSCALL(__NR_clone3, sys_clone3)
 #endif
 #define __NR_process_madvise 440
 __SYSCALL(__NR_process_madvise, sys_process_madvise)
+#define __NR_futex_waitv 449
+__SYSCALL(__NR_futex_waitv, sys_futex_waitv)
 
 #undef __NR_syscalls
-#define __NR_syscalls 441
+#define __NR_syscalls 450
 
 /*
  * 32 bit systems traditionally used different
