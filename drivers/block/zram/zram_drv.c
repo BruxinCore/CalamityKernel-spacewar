@@ -1243,7 +1243,7 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	int ret = 0;
 	unsigned long alloced_pages;
 	unsigned long handle = 0;
-	unsigned int comp_len = 0;
+	unsigned int comp_len = 0, alloc_len = 0;
 	void *src, *dst;
 	struct zcomp_strm *zstrm = NULL;
 	struct page *page = bvec->bv_page;
@@ -1256,6 +1256,7 @@ compress_again:
 	if (page_same_filled(src, &element)) {
 		kunmap_atomic(src);
 		zcomp_stream_put(zram->comp);
+		zs_free(zram->mem_pool, handle);
 		flags = ZRAM_SAME;
 		atomic64_inc(&zram->stats.same_pages);
 		goto out;
@@ -1276,7 +1277,12 @@ compress_again:
 		comp_len = PAGE_SIZE;
 	}
 
-	if (IS_ERR_OR_NULL((void *)handle))
+	if (!IS_ERR_OR_NULL((void *)handle) && comp_len > alloc_len) {
+		zs_free(zram->mem_pool, handle);
+		handle = 0;
+	}
+
+	if (IS_ERR_OR_NULL((void *)handle)) {
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				__GFP_KSWAPD_RECLAIM |
 				__GFP_NOWARN |
@@ -1284,6 +1290,8 @@ compress_again:
 				__GFP_MOVABLE |
 				__GFP_CMA |
 				__GFP_OFFLINABLE);
+		alloc_len = comp_len;
+	}
 	if (IS_ERR_OR_NULL((void *)handle)) {
 		if (zstrm) {
 			zcomp_stream_put(zram->comp);
@@ -1295,6 +1303,7 @@ compress_again:
 				__GFP_MOVABLE | __GFP_CMA |
 				__GFP_OFFLINABLE);
 		if (!IS_ERR_OR_NULL((void *)handle)) {
+			alloc_len = comp_len;
 			if (comp_len != PAGE_SIZE)
 				goto compress_again;
 		} else {
