@@ -2,8 +2,8 @@
 set -eu
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || fail 'Root required'
-case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop ro.product.odm.device)" in
-  *Spacewar*|*spacewar*) ;;
+case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop ro.product.odm.device):$(getprop ro.product.model):$(tr -d '\0' < /sys/firmware/devicetree/base/model 2>/dev/null)" in
+  *Spacewar*|*spacewar*|*NP1*|*A063*|*Nothing*) ;;
   *) fail 'Spacewar required' ;;
 esac
 case "$(uname -r)" in 5.4.*-qgki-Caly-Daitaku*|5.4.*-qgki-Caly-Rice-Stable|5.4.*-qgki-Caly-Rice-Beta) ;; *) fail 'Matching Caly kernel required';; esac

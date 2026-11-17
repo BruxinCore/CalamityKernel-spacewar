@@ -8,6 +8,8 @@ do.cleanuponabort=1
 device.name1=Spacewar
 device.name2=spacewar
 device.name3=NP1
+device.name4=A063
+device.name5=lahaina
 supported.versions=
 supported.patchlevels=
 '; }

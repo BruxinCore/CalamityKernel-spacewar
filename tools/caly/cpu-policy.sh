@@ -28,13 +28,14 @@ trap 'exit 130' HUP INT TERM
 printf '%s\n' "$$" > "$lock/pid"
 restore
 case "$mode" in legacy|restore) exit 0;; esac
-case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop ro.product.odm.device)" in
-  *Spacewar*|*spacewar*) ;;
+case "$(getprop ro.product.device):$(getprop ro.product.vendor.device):$(getprop ro.product.odm.device):$(getprop ro.product.model):$(tr -d '\0' < /sys/firmware/devicetree/base/model 2>/dev/null)" in
+  *Spacewar*|*spacewar*|*NP1*|*A063*|*Nothing*) ;;
   *) exit 1 ;;
 esac
 case "$(uname -r)" in 5.4.*-qgki-Caly-Daitaku*|5.4.*-qgki-Caly-Rice-Stable|5.4.*-qgki-Caly-Rice-Beta) ;; *) exit 1 ;; esac
 [ "$(getprop sys.boot_completed)" = 1 ] || exit 1
 base=/dev/cpuctl/top-app
+[ -d "$base" ] || base=/sys/fs/cgroup/cpu/top-app
 for name in cpu.uclamp.min cpu.uclamp.max cpu.uclamp.latency_sensitive; do
   [ -w "$base/$name" ] || exit 1
 done
