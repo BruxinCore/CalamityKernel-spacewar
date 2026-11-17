@@ -3972,6 +3972,9 @@ static int futex_parse_waitv(struct futex_vector *vs,
 		    !(aux.flags & FUTEX_32) || aux.__reserved)
 			return -EINVAL;
 
+		if (in_compat_syscall() && (aux.uaddr >> 32))
+			return -EINVAL;
+
 		if ((aux.uaddr & (sizeof(u32) - 1)) || (aux.val >> 32))
 			return -EINVAL;
 
