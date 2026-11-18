@@ -46,6 +46,8 @@
 #include <linux/memory_hotplug.h>
 #include <linux/cred.h>
 #include <linux/nmi.h>
+#include <linux/syscalls.h>
+#include <linux/pid.h>
 
 #include <asm/tlb.h>
 #include "internal.h"
@@ -1279,10 +1281,6 @@ void add_to_oom_reaper(struct task_struct *p)
 	put_task_struct(p);
 }
 
-/*
- * Should be called prior to sending sigkill. To guarantee that the
- * process to-be-killed is still untouched.
- */
 void check_panic_on_foreground_kill(struct task_struct *p)
 {
 	if (unlikely(!strcmp(current->comm, ULMK_MAGIC)
@@ -1292,4 +1290,64 @@ void check_panic_on_foreground_kill(struct task_struct *p)
 		show_mem_call_notifiers();
 		panic("Attempt to kill foreground task: %s", p->comm);
 	}
+}
+
+SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
+{
+	struct mm_struct *mm = NULL;
+	struct pid *pid;
+	struct task_struct *task;
+	struct task_struct *p;
+	bool reap = false;
+	long ret = 0;
+
+	if (flags)
+		return -EINVAL;
+
+	pid = pidfd_get_pid(pidfd);
+	if (IS_ERR(pid))
+		return PTR_ERR(pid);
+
+	task = get_pid_task(pid, PIDTYPE_PID);
+	if (!task) {
+		ret = -ESRCH;
+		goto put_pid;
+	}
+
+	p = find_lock_task_mm(task);
+	if (!p) {
+		ret = -ESRCH;
+		goto put_task;
+	}
+	if (!fatal_signal_pending(p)) {
+		task_unlock(p);
+		ret = -EINVAL;
+		goto put_task;
+	}
+	mm = p->mm;
+	mmgrab(mm);
+	if (task_will_free_mem(p))
+		reap = true;
+	else
+		ret = -EINVAL;
+	task_unlock(p);
+
+	if (!reap)
+		goto drop_mm;
+
+	if (down_read_killable(&mm->mmap_sem)) {
+		ret = -EINTR;
+		goto drop_mm;
+	}
+	if (!test_bit(MMF_OOM_SKIP, &mm->flags) && !__oom_reap_task_mm(mm))
+		ret = -EAGAIN;
+	up_read(&mm->mmap_sem);
+
+drop_mm:
+	mmdrop(mm);
+put_task:
+	put_task_struct(task);
+put_pid:
+	put_pid(pid);
+	return ret;
 }

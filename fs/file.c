@@ -18,6 +18,7 @@
 #include <linux/bitops.h>
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
+#include <uapi/linux/close_range.h>
 
 unsigned int sysctl_nr_open __read_mostly = 1024*1024;
 unsigned int sysctl_nr_open_min = BITS_PER_LONG;
@@ -654,7 +655,99 @@ out_unlock:
 	spin_unlock(&files->file_lock);
 	return -EBADF;
 }
-EXPORT_SYMBOL(__close_fd); /* for ksys_close() */
+EXPORT_SYMBOL(__close_fd);
+
+static inline void __range_cloexec(struct files_struct *cur_fds,
+				   unsigned int fd, unsigned int max_fd)
+{
+	struct fdtable *fdt;
+
+	spin_lock(&cur_fds->file_lock);
+	fdt = files_fdtable(cur_fds);
+	max_fd = min(max_fd, fdt->max_fds - 1);
+	if (fd <= max_fd)
+		bitmap_set(fdt->close_on_exec, fd, max_fd - fd + 1);
+	spin_unlock(&cur_fds->file_lock);
+}
+
+static inline void __range_close(struct files_struct *cur_fds, unsigned int fd,
+				 unsigned int max_fd)
+{
+	unsigned int cur_max;
+
+	rcu_read_lock();
+	cur_max = files_fdtable(cur_fds)->max_fds;
+	rcu_read_unlock();
+
+	if (cur_max == 0)
+		return;
+
+	max_fd = min(max_fd, cur_max - 1);
+
+	while (fd <= max_fd) {
+		struct file *file;
+
+		file = NULL;
+		spin_lock(&cur_fds->file_lock);
+		if (fd < files_fdtable(cur_fds)->max_fds) {
+			struct fdtable *fdt = files_fdtable(cur_fds);
+
+			file = fdt->fd[fd];
+			if (file) {
+				rcu_assign_pointer(fdt->fd[fd], NULL);
+				__put_unused_fd(cur_fds, fd);
+			}
+		}
+		spin_unlock(&cur_fds->file_lock);
+
+		if (file)
+			filp_close(file, cur_fds);
+		cond_resched();
+		fd++;
+	}
+}
+
+int __close_range(unsigned int fd, unsigned int max_fd, unsigned int flags)
+{
+	struct files_struct *cur_fds = current->files, *fds = NULL;
+
+	if (flags & ~(CLOSE_RANGE_UNSHARE | CLOSE_RANGE_CLOEXEC))
+		return -EINVAL;
+
+	if (fd > max_fd)
+		return -EINVAL;
+
+	if (flags & CLOSE_RANGE_UNSHARE) {
+		if (cur_fds && atomic_read(&cur_fds->count) > 1) {
+			int err = 0;
+
+			fds = dup_fd(cur_fds, &err);
+			if (!fds)
+				return err;
+			swap(cur_fds, fds);
+		}
+	}
+
+	if (flags & CLOSE_RANGE_CLOEXEC)
+		__range_cloexec(cur_fds, fd, max_fd);
+	else
+		__range_close(cur_fds, fd, max_fd);
+
+	if (fds) {
+		task_lock(current);
+		current->files = cur_fds;
+		task_unlock(current);
+		put_files_struct(fds);
+	}
+
+	return 0;
+}
+
+SYSCALL_DEFINE3(close_range, unsigned int, fd, unsigned int, max_fd,
+		unsigned int, flags)
+{
+	return __close_range(fd, max_fd, flags);
+}
 
 /*
  * variant of __close_fd that gets a ref on the file for later fput
