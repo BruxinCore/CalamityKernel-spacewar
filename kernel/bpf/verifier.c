@@ -475,6 +475,9 @@ static void print_verifier_state(struct bpf_verifier_env *env,
 				verbose(env, ",ks=%d,vs=%d",
 					reg->map_ptr->key_size,
 					reg->map_ptr->value_size);
+			else if (t == PTR_TO_MEM ||
+				 t == PTR_TO_MEM_OR_NULL)
+				verbose(env, ",ms=%d", reg->mem_size);
 			if (tnum_is_const(reg->var_off)) {
 				/* Typically an immediate SCALAR_VALUE, but
 				 * could be a pointer whose offset is too big
@@ -1882,6 +1885,8 @@ static bool is_spillable_regtype(enum bpf_reg_type type)
 	case PTR_TO_TCP_SOCK:
 	case PTR_TO_TCP_SOCK_OR_NULL:
 	case PTR_TO_XDP_SOCK:
+	case PTR_TO_MEM:
+	case PTR_TO_MEM_OR_NULL:
 		return true;
 	default:
 		return false;
@@ -2610,6 +2615,9 @@ static int check_ptr_alignment(struct bpf_verifier_env *env,
 		break;
 	case PTR_TO_MAP_VALUE:
 		pointer_desc = "value ";
+		break;
+	case PTR_TO_MEM:
+		pointer_desc = "mem ";
 		break;
 	case PTR_TO_CTX:
 		pointer_desc = "context ";
@@ -3422,6 +3430,7 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
 			/* final test in check_stack_boundary() */;
 		else if (!type_is_pkt_pointer(type) &&
 			 type != PTR_TO_MAP_VALUE &&
+			 type != PTR_TO_MEM &&
 			 type != expected_type)
 			goto err_type;
 	} else if (arg_type == ARG_CONST_SIZE ||
@@ -3500,6 +3509,7 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
 		expected_type = PTR_TO_STACK;
 		if (!type_is_pkt_pointer(type) &&
 		    type != PTR_TO_MAP_VALUE &&
+		    type != PTR_TO_MEM &&
 		    type != expected_type)
 			goto err_type;
 	} else {
@@ -4452,6 +4462,12 @@ static int retrieve_ptr_limit(const struct bpf_reg_state *ptr_reg,
 			     ptr_reg->smin_value :
 			     ptr_reg->umax_value) + ptr_reg->off;
 		break;
+	case PTR_TO_MEM:
+		max = ptr_reg->mem_size;
+		ptr_limit = (mask_to_left ?
+			     ptr_reg->smin_value :
+			     ptr_reg->umax_value) + ptr_reg->off;
+		break;
 	default:
 		return REASON_TYPE;
 	}
@@ -4703,6 +4719,14 @@ static int sanitize_check_bounds(struct bpf_verifier_env *env,
 			return -EACCES;
 		}
 		break;
+	case PTR_TO_MEM:
+		if (check_mem_region_access(env, dst, dst_reg->off, 1,
+					    dst_reg->mem_size, false)) {
+			verbose(env, "R%d pointer arithmetic of mem region goes out of range, "
+				"prohibited for !root\n", dst);
+			return -EACCES;
+		}
+		break;
 	default:
 		break;
 	}
@@ -4754,6 +4778,7 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 
 	switch (ptr_reg->type) {
 	case PTR_TO_MAP_VALUE_OR_NULL:
+	case PTR_TO_MEM_OR_NULL:
 		verbose(env, "R%d pointer arithmetic on %s prohibited, null-check it first\n",
 			dst, reg_type_str[ptr_reg->type]);
 		return -EACCES;
@@ -7295,30 +7320,16 @@ static bool regsafe(struct bpf_verifier_env *env, struct bpf_reg_state *rold,
 			return false;
 		}
 	case PTR_TO_MAP_VALUE:
-		/* If the new min/max/var_off satisfy the old ones and
-		 * everything else matches, we are OK.
-		 * 'id' is not compared, since it's only used for maps with
-		 * bpf_spin_lock inside map element and in such cases if
-		 * the rest of the prog is valid for one map element then
-		 * it's valid for all map elements regardless of the key
-		 * used in bpf_map_lookup()
-		 */
+	case PTR_TO_MEM:
 		return memcmp(rold, rcur, offsetof(struct bpf_reg_state, id)) == 0 &&
 		       range_within(rold, rcur) &&
 		       tnum_in(rold->var_off, rcur->var_off);
 	case PTR_TO_MAP_VALUE_OR_NULL:
-		/* a PTR_TO_MAP_VALUE could be safe to use as a
-		 * PTR_TO_MAP_VALUE_OR_NULL into the same map.
-		 * However, if the old PTR_TO_MAP_VALUE_OR_NULL then got NULL-
-		 * checked, doing so could have affected others with the same
-		 * id, and we can't check for that because we lost the id when
-		 * we converted to a PTR_TO_MAP_VALUE.
-		 */
-		if (rcur->type != PTR_TO_MAP_VALUE_OR_NULL)
+	case PTR_TO_MEM_OR_NULL:
+		if (rcur->type != rold->type)
 			return false;
 		if (memcmp(rold, rcur, offsetof(struct bpf_reg_state, id)))
 			return false;
-		/* Check our ids match any regs they're supposed to */
 		return check_ids(rold->id, rcur->id, idmap);
 	case PTR_TO_PACKET_META:
 	case PTR_TO_PACKET:
