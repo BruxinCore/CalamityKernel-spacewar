@@ -707,7 +707,9 @@ static void binder_do_set_priority(struct binder_thread *thread,
 	}
 
 	if (verify && is_fair_policy(policy) && !has_cap_nice) {
-		long min_nice = rlimit_to_nice(task_rlimit(task, RLIMIT_NICE));
+		long min_nice = min_t(long,
+				      rlimit_to_nice(task_rlimit(task, RLIMIT_NICE)),
+				      -10);
 
 		if (min_nice > MAX_NICE) {
 			binder_user_error("%d RLIMIT_NICE not set\n",
