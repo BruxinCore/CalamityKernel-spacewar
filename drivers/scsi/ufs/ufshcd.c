@@ -1967,7 +1967,7 @@ static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 
 	hba->clk_gating.state = CLKS_ON;
 
-	hba->clk_gating.delay_ms = 150;
+	hba->clk_gating.delay_ms = 50;
 	INIT_DELAYED_WORK(&hba->clk_gating.gate_work, ufshcd_gate_work);
 	INIT_WORK(&hba->clk_gating.ungate_work, ufshcd_ungate_work);
 
