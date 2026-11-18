@@ -26,10 +26,12 @@ fixup_cumulative_runnable_avg(struct walt_sched_stats *stats,
 			      s64 pred_demand_scaled_delta)
 {
 	stats->cumulative_runnable_avg_scaled += demand_scaled_delta;
-	BUG_ON((s64)stats->cumulative_runnable_avg_scaled < 0);
+	if (unlikely((s64)stats->cumulative_runnable_avg_scaled < 0))
+		stats->cumulative_runnable_avg_scaled = 0;
 
 	stats->pred_demands_sum_scaled += pred_demand_scaled_delta;
-	BUG_ON((s64)stats->pred_demands_sum_scaled < 0);
+	if (unlikely((s64)stats->pred_demands_sum_scaled < 0))
+		stats->pred_demands_sum_scaled = 0;
 }
 
 static inline void
@@ -38,13 +40,6 @@ walt_inc_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 	fixup_cumulative_runnable_avg(&rq->wrq.walt_stats, p->wts.demand_scaled,
 					p->wts.pred_demand_scaled);
 
-	/*
-	 * Add a task's contribution to the cumulative window demand when
-	 *
-	 * (1) task is enqueued with on_rq = 1 i.e migration,
-	 *     prio/cgroup/class change.
-	 * (2) task is waking for the first time in this window.
-	 */
 	if (p->on_rq || (p->wts.last_sleep_ts < rq->wrq.window_start))
 		walt_fixup_cum_window_demand(rq, p->wts.demand_scaled);
 }
@@ -56,11 +51,6 @@ walt_dec_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 				      -(s64)p->wts.demand_scaled,
 				      -(s64)p->wts.pred_demand_scaled);
 
-	/*
-	 * on_rq will be 1 for sleeping tasks. So check if the task
-	 * is migrating or dequeuing in RUNNING state to change the
-	 * prio/cgroup/class.
-	 */
 	if (task_on_rq_migrating(p) || p->state == TASK_RUNNING)
 		walt_fixup_cum_window_demand(rq, -(s64)p->wts.demand_scaled);
 }
@@ -70,7 +60,8 @@ static inline void walt_adjust_nr_big_tasks(struct rq *rq, int delta, bool inc)
 	sched_update_nr_prod(cpu_of(rq), 0, true);
 	rq->wrq.walt_stats.nr_big_tasks += inc ? delta : -delta;
 
-	BUG_ON(rq->wrq.walt_stats.nr_big_tasks < 0);
+	if (unlikely(rq->wrq.walt_stats.nr_big_tasks < 0))
+		rq->wrq.walt_stats.nr_big_tasks = 0;
 }
 
 static inline void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
@@ -93,7 +84,8 @@ static inline void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 	if (p->wts.rtg_high_prio)
 		rq->wrq.walt_stats.nr_rtg_high_prio_tasks--;
 
-	BUG_ON(rq->wrq.walt_stats.nr_big_tasks < 0);
+	if (unlikely(rq->wrq.walt_stats.nr_big_tasks < 0))
+		rq->wrq.walt_stats.nr_big_tasks = 0;
 
 	walt_dec_cumulative_runnable_avg(rq, p);
 }

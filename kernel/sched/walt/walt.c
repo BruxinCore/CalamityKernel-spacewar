@@ -727,10 +727,14 @@ static inline void account_load_subtractions(struct rq *rq)
 		ls[i].new_subs = 0;
 	}
 
-	SCHED_BUG_ON((s64)rq->wrq.prev_runnable_sum < 0);
-	SCHED_BUG_ON((s64)rq->wrq.curr_runnable_sum < 0);
-	SCHED_BUG_ON((s64)rq->wrq.nt_prev_runnable_sum < 0);
-	SCHED_BUG_ON((s64)rq->wrq.nt_curr_runnable_sum < 0);
+	if (unlikely((s64)rq->wrq.prev_runnable_sum < 0))
+		rq->wrq.prev_runnable_sum = 0;
+	if (unlikely((s64)rq->wrq.curr_runnable_sum < 0))
+		rq->wrq.curr_runnable_sum = 0;
+	if (unlikely((s64)rq->wrq.nt_prev_runnable_sum < 0))
+		rq->wrq.nt_prev_runnable_sum = 0;
+	if (unlikely((s64)rq->wrq.nt_curr_runnable_sum < 0))
+		rq->wrq.nt_curr_runnable_sum = 0;
 }
 
 static inline void create_subtraction_entry(struct rq *rq, u64 ws, int index)
