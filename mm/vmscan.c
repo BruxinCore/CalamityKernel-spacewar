@@ -4725,10 +4725,10 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 		cond_resched();
 	}
 
-	/* see the comment in lru_gen_age_node() */
 	if (sc->nr_reclaimed - reclaimed >= MIN_LRU_BATCH && !need_aging)
 		sc->memcgs_need_aging = false;
 done:
+	sc->nr_scanned += scanned;
 	clear_mm_walk();
 
 	blk_finish_plug(&plug);
@@ -5412,13 +5412,12 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 	bool scan_adjusted;
 
 	if (lru_gen_enabled()) {
+		*lru_pages = 0;
 		lru_gen_shrink_lruvec(lruvec, sc);
 		return;
 	}
 
 	get_scan_count(lruvec, memcg, sc, nr, lru_pages);
-
-	/* Record the original scan target for proportional adjustments later */
 	memcpy(targets, nr, sizeof(nr));
 
 	/*
