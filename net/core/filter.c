@@ -2036,6 +2036,38 @@ static const struct bpf_func_proto bpf_csum_update_proto = {
 	.arg2_type	= ARG_ANYTHING,
 };
 
+BPF_CALL_2(bpf_csum_level, struct sk_buff *, skb, u64, level)
+{
+	switch (level) {
+	case BPF_CSUM_LEVEL_INC:
+		__skb_incr_checksum_unnecessary(skb);
+		break;
+	case BPF_CSUM_LEVEL_DEC:
+		__skb_decr_checksum_unnecessary(skb);
+		break;
+	case BPF_CSUM_LEVEL_RESET:
+		skb->ip_summed = CHECKSUM_NONE;
+		skb->csum_valid = 0;
+		skb->csum_level = 0;
+		break;
+	case BPF_CSUM_LEVEL_QUERY:
+		return skb->ip_summed == CHECKSUM_UNNECESSARY ?
+		       skb->csum_level : -EACCES;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static const struct bpf_func_proto bpf_csum_level_proto = {
+	.func		= bpf_csum_level,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_CTX,
+	.arg2_type	= ARG_ANYTHING,
+};
+
 static inline int __bpf_rx_skb(struct net_device *dev, struct sk_buff *skb)
 {
 	return dev_forward_skb(dev, skb);
@@ -4190,6 +4222,50 @@ static const struct bpf_func_proto bpf_skb_ancestor_cgroup_id_proto = {
 	.arg1_type      = ARG_PTR_TO_CTX,
 	.arg2_type      = ARG_ANYTHING,
 };
+
+BPF_CALL_1(bpf_sk_cgroup_id, struct sock *, sk)
+{
+	struct cgroup *cgrp;
+
+	sk = sk_to_full_sk(sk);
+	if (!sk || !sk_fullsock(sk))
+		return 0;
+
+	cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
+	return cgrp->kn->id.id;
+}
+
+static const struct bpf_func_proto bpf_sk_cgroup_id_proto = {
+	.func		= bpf_sk_cgroup_id,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_SOCK_COMMON,
+};
+
+BPF_CALL_2(bpf_sk_ancestor_cgroup_id, struct sock *, sk, int, ancestor_level)
+{
+	struct cgroup *ancestor;
+	struct cgroup *cgrp;
+
+	sk = sk_to_full_sk(sk);
+	if (!sk || !sk_fullsock(sk))
+		return 0;
+
+	cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
+	ancestor = cgroup_ancestor(cgrp, ancestor_level);
+	if (!ancestor)
+		return 0;
+
+	return ancestor->kn->id.id;
+}
+
+static const struct bpf_func_proto bpf_sk_ancestor_cgroup_id_proto = {
+	.func		= bpf_sk_ancestor_cgroup_id,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_SOCK_COMMON,
+	.arg2_type	= ARG_ANYTHING,
+};
 #endif
 
 static unsigned long bpf_xdp_copy(void *dst_buff, const void *src_buff,
@@ -6101,6 +6177,16 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 		return &bpf_ktime_get_ns_proto;
 	case BPF_FUNC_ktime_get_boot_ns:
 		return &bpf_ktime_get_boot_ns_proto;
+	case BPF_FUNC_ringbuf_output:
+		return &bpf_ringbuf_output_proto;
+	case BPF_FUNC_ringbuf_reserve:
+		return &bpf_ringbuf_reserve_proto;
+	case BPF_FUNC_ringbuf_submit:
+		return &bpf_ringbuf_submit_proto;
+	case BPF_FUNC_ringbuf_discard:
+		return &bpf_ringbuf_discard_proto;
+	case BPF_FUNC_ringbuf_query:
+		return &bpf_ringbuf_query_proto;
 	default:
 		break;
 	}
@@ -6215,6 +6301,12 @@ cg_skb_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 #ifdef CONFIG_SOCK_CGROUP_DATA
 	case BPF_FUNC_skb_cgroup_id:
 		return &bpf_skb_cgroup_id_proto;
+	case BPF_FUNC_skb_ancestor_cgroup_id:
+		return &bpf_skb_ancestor_cgroup_id_proto;
+	case BPF_FUNC_sk_cgroup_id:
+		return &bpf_sk_cgroup_id_proto;
+	case BPF_FUNC_sk_ancestor_cgroup_id:
+		return &bpf_sk_ancestor_cgroup_id_proto;
 #endif
 #ifdef CONFIG_INET
 	case BPF_FUNC_tcp_sock:
@@ -6245,6 +6337,8 @@ tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_csum_diff_proto;
 	case BPF_FUNC_csum_update:
 		return &bpf_csum_update_proto;
+	case BPF_FUNC_csum_level:
+		return &bpf_csum_level_proto;
 	case BPF_FUNC_l3_csum_replace:
 		return &bpf_l3_csum_replace_proto;
 	case BPF_FUNC_l4_csum_replace:
@@ -6312,6 +6406,10 @@ tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_skb_cgroup_id_proto;
 	case BPF_FUNC_skb_ancestor_cgroup_id:
 		return &bpf_skb_ancestor_cgroup_id_proto;
+	case BPF_FUNC_sk_cgroup_id:
+		return &bpf_sk_cgroup_id_proto;
+	case BPF_FUNC_sk_ancestor_cgroup_id:
+		return &bpf_sk_ancestor_cgroup_id_proto;
 #endif
 #ifdef CONFIG_INET
 	case BPF_FUNC_sk_lookup_tcp:

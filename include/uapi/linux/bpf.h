@@ -136,6 +136,12 @@ enum bpf_map_type {
 	BPF_MAP_TYPE_STACK,
 	BPF_MAP_TYPE_SK_STORAGE,
 	BPF_MAP_TYPE_DEVMAP_HASH,
+#ifndef __GENKSYMS__
+	BPF_MAP_TYPE_STRUCT_OPS,
+	BPF_MAP_TYPE_RINGBUF,
+	BPF_MAP_TYPE_INODE_STORAGE,
+	BPF_MAP_TYPE_TASK_STORAGE,
+#endif
 };
 
 /* Note that tracing related programs such as
@@ -2889,7 +2895,24 @@ union bpf_attr {
 	FN(get_netns_cookie),		\
 	FN(get_current_ancestor_cgroup_id),	\
 	FN(sk_assign),			\
-	FN(ktime_get_boot_ns),
+	FN(ktime_get_boot_ns),		\
+	__BPF_FUNC_MAPPER_EXT(FN)
+
+#ifdef __GENKSYMS__
+#define __BPF_FUNC_MAPPER_EXT(FN)
+#else
+#define __BPF_FUNC_MAPPER_EXT(FN)	\
+	FN(seq_printf),			\
+	FN(seq_write),			\
+	FN(sk_cgroup_id),		\
+	FN(sk_ancestor_cgroup_id),	\
+	FN(ringbuf_output),		\
+	FN(ringbuf_reserve),		\
+	FN(ringbuf_submit),		\
+	FN(ringbuf_discard),		\
+	FN(ringbuf_query),		\
+	FN(csum_level),
+#endif
 
 /* integer value in 'imm' field of BPF_CALL instruction selects which helper
  * function eBPF program intends to call
@@ -2985,6 +3008,31 @@ enum bpf_lwt_encap_mode {
 	BPF_LWT_ENCAP_SEG6,
 	BPF_LWT_ENCAP_SEG6_INLINE,
 	BPF_LWT_ENCAP_IP,
+};
+
+enum {
+	BPF_F_NO_WAKEUP		= (1ULL << 0),
+	BPF_F_FORCE_WAKEUP	= (1ULL << 1),
+};
+
+enum {
+	BPF_RB_AVAIL_DATA = 0,
+	BPF_RB_RING_SIZE = 1,
+	BPF_RB_CONS_POS = 2,
+	BPF_RB_PROD_POS = 3,
+};
+
+enum {
+	BPF_RINGBUF_BUSY_BIT	= (1U << 31),
+	BPF_RINGBUF_DISCARD_BIT	= (1U << 30),
+	BPF_RINGBUF_HDR_SZ	= 8,
+};
+
+enum {
+	BPF_CSUM_LEVEL_QUERY,
+	BPF_CSUM_LEVEL_INC,
+	BPF_CSUM_LEVEL_DEC,
+	BPF_CSUM_LEVEL_RESET,
 };
 
 #define __bpf_md_ptr(type, name)	\

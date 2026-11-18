@@ -52,6 +52,8 @@ struct bpf_reg_state {
 		 */
 		struct bpf_map *map_ptr;
 
+		u32 mem_size;
+
 		/* Max size from any of the above. */
 		unsigned long raw;
 	};
