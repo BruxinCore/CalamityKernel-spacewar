@@ -1009,19 +1009,21 @@ static int sugov_init(struct cpufreq_policy *policy)
 	}
 
 	tunables->up_rate_limit_us = 0;
-	tunables->down_rate_limit_us = 30000;
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
 	tunables->hispeed_freq = 0;
 
 	switch (policy->cpu) {
 	default:
 	case 0:
+		tunables->down_rate_limit_us = 24000;
 		tunables->rtg_boost_freq = DEFAULT_CPU0_RTG_BOOST_FREQ;
 		break;
 	case 4:
+		tunables->down_rate_limit_us = 10000;
 		tunables->rtg_boost_freq = DEFAULT_CPU4_RTG_BOOST_FREQ;
 		break;
 	case 7:
+		tunables->down_rate_limit_us = 6000;
 		tunables->rtg_boost_freq = DEFAULT_CPU7_RTG_BOOST_FREQ;
 		break;
 	}
