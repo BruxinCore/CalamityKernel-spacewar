@@ -81,14 +81,16 @@ u64 select_estimate_accuracy(struct timespec64 *tv)
 	 * Realtime tasks get a slack of 0 for obvious reasons.
 	 */
 
-	if (rt_task(current))
+	if (rt_task(current) || task_nice(current) < 0)
 		return 0;
 
 	ktime_get_ts64(&now);
 	now = timespec64_sub(*tv, now);
 	ret = __estimate_accuracy(&now);
 	if (ret < current->timer_slack_ns)
-		return current->timer_slack_ns;
+		ret = current->timer_slack_ns;
+	if (task_nice(current) > 0 && ret < 250000)
+		return 250000;
 	return ret;
 }
 

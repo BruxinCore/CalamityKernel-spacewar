@@ -1996,8 +1996,10 @@ long hrtimer_nanosleep(const struct timespec64 *rqtp,
 	u64 slack;
 
 	slack = current->timer_slack_ns;
-	if (dl_task(current) || rt_task(current))
+	if (dl_task(current) || rt_task(current) || task_nice(current) < 0)
 		slack = 0;
+	else if (task_nice(current) > 0 && slack < 250000)
+		slack = 250000;
 
 	hrtimer_init_sleeper_on_stack(&t, clockid, mode);
 	hrtimer_set_expires_range_ns(&t.timer, timespec64_to_ktime(*rqtp), slack);
