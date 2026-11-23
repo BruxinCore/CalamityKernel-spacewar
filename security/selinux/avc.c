@@ -25,6 +25,7 @@
 #include <net/af_unix.h>
 #include <linux/ip.h>
 #include <linux/audit.h>
+#include <linux/ratelimit.h>
 #include <linux/ipv6.h>
 #include <net/ipv6.h>
 #include "avc.h"
@@ -757,11 +758,16 @@ noinline int slow_avc_audit(u32 ssid, u32 tsid, u16 tclass,
 			    u32 requested, u32 audited, u32 denied, int result,
 			    struct common_audit_data *a)
 {
+	static DEFINE_RATELIMIT_STATE(avc_audit_rs, 5 * HZ, 20);
 	struct common_audit_data stack_data;
 	struct selinux_audit_data sad;
 
 	if (WARN_ON(!tclass || tclass >= ARRAY_SIZE(secclass_map)))
 		return -EINVAL;
+
+	ratelimit_set_flags(&avc_audit_rs, RATELIMIT_MSG_ON_RELEASE);
+	if (denied && !__ratelimit(&avc_audit_rs))
+		return 0;
 
 	if (!a) {
 		a = &stack_data;
