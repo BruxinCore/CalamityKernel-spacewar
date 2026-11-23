@@ -1,0 +1,22 @@
+--- a/dwc3-msm-core.c
++++ b/dwc3-msm-core.c
+@@ -5588,6 +5588,8 @@
+ 	mutex_lock(&mdwc->role_switch_mutex);
+ 	cur_role = dwc3_msm_get_role(mdwc);
+ 
++	dev_err(mdwc->dev, "CALY_USB: set_role cur=%s new=%s drd=%d\n",
++		dwc3_msm_usb_role_string(cur_role), dwc3_msm_usb_role_string(role), mdwc->drd_state);
+ 	dbg_log_string("cur_role:%s new_role:%s refcnt:%d\n", dwc3_msm_usb_role_string(cur_role),
+ 				dwc3_msm_usb_role_string(role), mdwc->refcnt_dp_usb);
+ 
+@@ -6971,8 +6973,8 @@
+ 		}
+ 	}
+ 
+-	if (!mdwc->role_switch && (!mdwc->extcon ||
+-			!dwc3_msm_extcon_is_valid_source(mdwc))) {
++	if (!mdwc->extcon ||
++			!dwc3_msm_extcon_is_valid_source(mdwc)) {
+ 		switch (mdwc->dr_mode) {
+ 		case USB_DR_MODE_OTG:
+ 			if (of_property_read_bool(node,
