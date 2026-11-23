@@ -1,0 +1,437 @@
+--- a/asoc/codecs/wcd938x/wcd938x.c
++++ b/asoc/codecs/wcd938x/wcd938x.c
+@@ -3675,6 +3675,7 @@
+ 	{"WCD_TX_OUTPUT", NULL, "ADC1_MIXER"},
+ 	{"ADC1_MIXER", "Switch", "ADC1 REQ"},
+ 	{"ADC1 REQ", NULL, "ADC1"},
++	{"ADC1", NULL, "AMIC1"},
+ 	{"ADC1", NULL, "AMIC1_MIXER"},
+ 	{"AMIC1_MIXER", "Switch", "AMIC1"},
+ 	{"AMIC1_MIXER", NULL, "VA_AMIC1_MIXER"},
+@@ -3685,12 +3686,12 @@
+ 	{"ADC2 REQ", NULL, "ADC2"},
+ 	{"ADC2", NULL, "HDR12 MUX"},
+ 	{"HDR12 MUX", "NO_HDR12", "ADC2 MUX"},
+-	{"HDR12 MUX", "HDR12", "AMIC1_MIXER"},
+-	{"ADC2 MUX", "INP3", "AMIC3_MIXER"},
++	{"HDR12 MUX", "HDR12", "AMIC1"},
++	{"ADC2 MUX", "INP3", "AMIC3"},
+ 	{"AMIC3_MIXER", "Switch", "AMIC3"},
+ 	{"AMIC3_MIXER", NULL, "VA_AMIC3_MIXER"},
+ 	{"VA_AMIC3_MIXER", "Switch", "VA AMIC3"},
+-	{"ADC2 MUX", "INP2", "AMIC2_MIXER"},
++	{"ADC2 MUX", "INP2", "AMIC2"},
+ 	{"AMIC2_MIXER", "Switch", "AMIC2"},
+ 	{"AMIC2_MIXER", NULL, "VA_AMIC2_MIXER"},
+ 	{"VA_AMIC2_MIXER", "Switch", "VA AMIC2"},
+@@ -3700,12 +3701,12 @@
+ 	{"ADC3 REQ", NULL, "ADC3"},
+ 	{"ADC3", NULL, "HDR34 MUX"},
+ 	{"HDR34 MUX", "NO_HDR34", "ADC3 MUX"},
+-	{"HDR34 MUX", "HDR34", "AMIC5_MIXER"},
+-	{"ADC3 MUX", "INP4", "AMIC4_MIXER"},
++	{"HDR34 MUX", "HDR34", "AMIC5"},
++	{"ADC3 MUX", "INP4", "AMIC4"},
+ 	{"AMIC4_MIXER", "Switch", "AMIC4"},
+ 	{"AMIC4_MIXER", NULL, "VA_AMIC4_MIXER"},
+ 	{"VA_AMIC4_MIXER", "Switch", "VA AMIC4"},
+-	{"ADC3 MUX", "INP6", "AMIC6_MIXER"},
++	{"ADC3 MUX", "INP6", "AMIC6"},
+ 	{"AMIC6_MIXER", "Switch", "AMIC6"},
+ 	{"AMIC6_MIXER", NULL, "VA_AMIC6_MIXER"},
+ 	{"VA_AMIC6_MIXER", "Switch", "VA AMIC6"},
+@@ -3714,11 +3715,11 @@
+ 	{"ADC4_MIXER", "Switch", "ADC4 REQ"},
+ 	{"ADC4 REQ", NULL, "ADC4"},
+ 	{"ADC4", NULL, "ADC4 MUX"},
+-	{"ADC4 MUX", "INP5", "AMIC5_MIXER"},
++	{"ADC4 MUX", "INP5", "AMIC5"},
+ 	{"AMIC5_MIXER", "Switch", "AMIC5"},
+ 	{"AMIC5_MIXER", NULL, "VA_AMIC5_MIXER"},
+ 	{"VA_AMIC5_MIXER", "Switch", "VA AMIC5"},
+-	{"ADC4 MUX", "INP7", "AMIC7_MIXER"},
++	{"ADC4 MUX", "INP7", "AMIC7"},
+ 	{"AMIC7_MIXER", "Switch", "AMIC7"},
+ 	{"AMIC7_MIXER", NULL, "VA_AMIC7_MIXER"},
+ 	{"VA_AMIC7_MIXER", "Switch", "VA AMIC7"},
+--- a/asoc/lahaina.c
++++ b/asoc/lahaina.c
+@@ -971,7 +971,7 @@
+ static const unsigned int audio_core_list[] = {1, 2};
+ //static cpumask_t audio_cpu_map = CPU_MASK_NONE;
+ //static struct dev_pm_qos_request *msm_audio_req;
+-static unsigned int qos_client_active_cnt;
++static unsigned int __maybe_unused qos_client_active_cnt;
+ 
+ static void msm_audio_add_qos_request(void)
+ {
+@@ -4812,7 +4812,7 @@
+ 	if (!pdata->fsa_handle)
+ 		return false;
+ 
+-	return fsa4480_switch_event(pdata->fsa_handle, FSA_MIC_GND_SWAP);
++	return 0;
+ }
+ 
+ static bool msm_swap_gnd_mic(struct snd_soc_component *component, bool active)
+@@ -5386,23 +5386,17 @@
+ static int msm_fe_qos_prepare(struct snd_pcm_substream *substream)
+ {
+ 	if (cpu_latency_qos_request_active(&substream->latency_pm_qos_req))
+-		cpu_latency_qos_remove_request(&substream->latency_pm_qos_req);
+-
+-	qos_client_active_cnt++;
+-	if (qos_client_active_cnt == 1)
+ 		cpu_latency_qos_update_request(&substream->latency_pm_qos_req, MSM_LL_QOS_VALUE);
++	else
++		cpu_latency_qos_add_request(&substream->latency_pm_qos_req, MSM_LL_QOS_VALUE);
+ 
+ 	return 0;
+ }
+ 
+ static void msm_fe_qos_shutdown(struct snd_pcm_substream *substream)
+ {
+-	(void)substream;
+-
+-	if (qos_client_active_cnt > 0)
+-		qos_client_active_cnt--;
+-	if (qos_client_active_cnt == 0)
+-		cpu_latency_qos_update_request(&substream->latency_pm_qos_req, PM_QOS_DEFAULT_VALUE);
++	if (cpu_latency_qos_request_active(&substream->latency_pm_qos_req))
++		cpu_latency_qos_remove_request(&substream->latency_pm_qos_req);
+ }
+ 
+ void mi2s_disable_audio_vote(struct snd_pcm_substream *substream)
+@@ -7366,7 +7360,8 @@
+ 
+ 		/* populate platform_of_node for snd card dai links */
+ 		if (dai_link[i].platforms->name &&
+-		    !dai_link[i].platforms->of_node) {
++		    !dai_link[i].platforms->of_node &&
++		    strcmp(dai_link[i].platforms->name, "snd-soc-dummy")) {
+ 			index = of_property_match_string(cdev->of_node,
+ 						"asoc-platform-names",
+ 						dai_link[i].platforms->name);
+@@ -8603,7 +8598,7 @@
+ }
+ module_exit(msm_asoc_machine_exit);
+ 
+-MODULE_SOFTDEP("pre: bt_fm_slim");
++
+ MODULE_DESCRIPTION("ALSA SoC msm");
+ MODULE_LICENSE("GPL v2");
+ MODULE_ALIAS("platform:" DRV_NAME);
+--- a/asoc/msm_dailink.h
++++ b/asoc/msm_dailink.h
+@@ -220,8 +220,7 @@
+ SND_SOC_DAILINK_DEFS(tx_cdcdma5_tx,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45115")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "tx_macro_tx3"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
+ 
+ SND_SOC_DAILINK_DEFS(multimedia31,
+@@ -934,7 +933,8 @@
+ 
+ SND_SOC_DAILINK_DEFS(pri_mi2s_rx,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-q6-mi2s.0")),
+-	DAILINK_COMP_ARRAY(COMP_CODEC("msm-stub-codec.1", "msm-stub-rx")),
++	DAILINK_COMP_ARRAY(COMP_CODEC("tfa98xx.1-0034", "tfa98xx-aif-1-34"),
++	COMP_CODEC("tfa98xx.1-0035", "tfa98xx-aif-1-35")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(pri_mi2s_tx,
+@@ -1076,36 +1076,31 @@
+ SND_SOC_DAILINK_DEFS(rx_dma_rx0,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45104")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "rx_macro_rx1"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(rx_dma_rx1,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45106")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "rx_macro_rx2"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(rx_dma_rx2,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45108")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "rx_macro_rx3"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(rx_dma_rx3,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45110")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "rx_macro_rx4"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(rx_dma_rx5,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45114")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "rx_macro_rx5"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(rx_dma_rx6,
+@@ -1117,19 +1112,13 @@
+ SND_SOC_DAILINK_DEFS(tx_dma_tx3,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45111")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "tx_macro_tx1"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(tx_dma_tx4,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("msm-dai-cdc-dma-dev.45113")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero_codec", "tx_macro_tx2"),
+-			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc"),
+-			   COMP_CODEC("swr-dmic.01", "swr_dmic_tx0"),
+-			   COMP_CODEC("swr-dmic.02", "swr_dmic_tx1"),
+-			   COMP_CODEC("swr-dmic.03", "swr_dmic_tx2"),
+-			   COMP_CODEC("swr-dmic.04", "swr_dmic_tx3")),
++			   COMP_CODEC("wcd938x_codec", "wcd938x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-routing")));
+ 
+ SND_SOC_DAILINK_DEFS(va_dma_tx0,
+--- a/dsp/q6afe.c
++++ b/dsp/q6afe.c
+@@ -16,6 +16,16 @@
+ #include <dsp/apr_audio-v2.h>
+ #include <dsp/audio_cal_utils.h>
+ #include <dsp/q6afe-v2.h>
++
++#define AFE_MODULE_ID_TFADSP_RX (0x1000B911)
++#define AFE_MODULE_ID_TFADSP_TX (0x1000B912)
++#define AFE_PARAM_ID_TFADSP_TX_SET_ENABLE (0x1000B920)
++#define AFE_PARAM_ID_TFADSP_RX_CFG (0x1000B921)
++#define AFE_PARAM_ID_TFADSP_RX_GET_RESULT (0x1000B922)
++#define AFE_PARAM_ID_TFADSP_RX_SET_BYPASS (0x1000B923)
++#define AFE_PORT_ID_TFADSP_RX (0x1000)
++#define AFE_PORT_ID_TFADSP_TX (0x1001)
++
+ #include <dsp/q6audio-v2.h>
+ #include <dsp/q6common.h>
+ #include <dsp/q6core.h>
+@@ -259,6 +269,8 @@
+ 	u32 power_mode[AFE_MAX_PORTS];
+ 	struct vad_config vad_cfg[AFE_MAX_PORTS];
+ 	struct work_struct afe_dc_work;
++	struct rtac_cal_block_data tfa_cal;
++	atomic_t tfa_state;
+ 	struct notifier_block event_notifier;
+ 	/* FTM spk params */
+ 	uint32_t initial_cal;
+@@ -1052,6 +1064,25 @@
+ 	schedule_work(&this_afe.afe_spdif_work);
+ }
+ 
++
++static bool tfa98xx_make_afe_callback(struct apr_client_data *data)
++{
++	uint32_t *payload = data->payload;
++
++	if (atomic_read(&this_afe.tfa_state) == 1 &&
++	    data->payload_size == sizeof(uint32_t)) {
++		atomic_set(&this_afe.status, payload[0]);
++		if (payload[0])
++			atomic_set(&this_afe.state, -1);
++		else
++			atomic_set(&this_afe.state, 0);
++		atomic_set(&this_afe.tfa_state, 0);
++		wake_up(&this_afe.wait[data->token]);
++		return true;
++	}
++	return false;
++}
++
+ static bool afe_token_is_valid(uint32_t token)
+ {
+ 	if (token >= AFE_MAX_PORTS) {
+@@ -1138,6 +1169,8 @@
+ 		uint32_t *payload = data->payload;
+ 		uint32_t param_id;
+ 		uint32_t param_id_pos = 0;
++		if (tfa98xx_make_afe_callback(data))
++			return 0;
+ 
+ 		if (!payload || (data->token >= AFE_MAX_PORTS)) {
+ 			pr_err("%s: Error: size %d payload %pK token %d\n",
+@@ -2540,6 +2573,13 @@
+ 	case AFE_PARAM_ID_SP_V2_EX_VI_FTM_CFG:
+ 		param_info.module_id = AFE_MODULE_SPEAKER_PROTECTION_V2_EX_VI;
+ 		break;
++	case AFE_PARAM_ID_TFADSP_RX_CFG:
++	case AFE_PARAM_ID_TFADSP_RX_SET_BYPASS:
++		param_info.module_id = AFE_MODULE_ID_TFADSP_RX;
++		break;
++	case AFE_PARAM_ID_TFADSP_TX_SET_ENABLE:
++		param_info.module_id = AFE_MODULE_ID_TFADSP_TX;
++		break;
+ 	case AFE_PARAM_ID_SP_V4_VI_CHANNEL_MAP_CFG:
+ 	case AFE_PARAM_ID_SP_V4_VI_OP_MODE_CFG:
+ 	case AFE_PARAM_ID_SP_V4_VI_R0T0_CFG:
+@@ -12027,6 +12067,150 @@
+ 	kfree(data);
+ }
+ 
++
++int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead)
++{
++	int32_t result = 0, port_id = AFE_PORT_ID_TFADSP_RX;
++	uint32_t port_index = 0, payload_size = 0;
++	size_t len;
++	struct rtac_cal_block_data *tfa_cal = &(this_afe.tfa_cal);
++	struct mem_mapping_hdr mem_hdr;
++	struct param_hdr_v3 param_hdr;
++
++	memset(&mem_hdr, 0x00, sizeof(mem_hdr));
++	memset(&param_hdr, 0x00, sizeof(param_hdr));
++
++	if (0 == tfa_cal->map_data.mem_handle) {
++		tfa_cal->map_data.map_size = SZ_4K;
++		result = msm_audio_ion_alloc(&(tfa_cal->map_data.mem_handle),
++					     tfa_cal->map_data.map_size,
++					     &(tfa_cal->cal_data.paddr),
++					     &len,
++					     &(tfa_cal->cal_data.kvaddr));
++		if (result < 0)
++			goto err;
++	}
++
++	if (0 == tfa_cal->map_data.map_handle) {
++		result = afe_map_rtac_block(tfa_cal);
++		if (result < 0)
++			goto err;
++	}
++
++	port_index = q6audio_get_port_index(port_id);
++	if (port_index >= AFE_MAX_PORTS) {
++		result = -EINVAL;
++		goto err;
++	}
++
++	if (cmd_size > (SZ_4K - sizeof(struct param_hdr_v3))) {
++		result = -EINVAL;
++		goto err;
++	}
++
++	param_hdr.module_id = AFE_MODULE_ID_TFADSP_RX;
++	param_hdr.instance_id = INSTANCE_ID_0;
++	param_hdr.param_size = cmd_size;
++
++	if (!bRead) {
++		param_hdr.param_id = AFE_PARAM_ID_TFADSP_RX_CFG;
++		q6common_pack_pp_params(tfa_cal->cal_data.kvaddr,
++					&param_hdr, buf, &payload_size);
++		tfa_cal->cal_data.size = payload_size;
++	} else {
++		param_hdr.param_id = AFE_PARAM_ID_TFADSP_RX_GET_RESULT;
++		tfa_cal->cal_data.size = cmd_size + sizeof(struct param_hdr_v3);
++		param_hdr.param_size = SZ_1K + SZ_2K;
++	}
++
++	mem_hdr.data_payload_addr_lsw = lower_32_bits(tfa_cal->cal_data.paddr);
++	mem_hdr.data_payload_addr_msw = msm_audio_populate_upper_32_bits(tfa_cal->cal_data.paddr);
++	mem_hdr.mem_map_handle = tfa_cal->map_data.map_handle;
++
++	result = afe_q6_interface_prepare();
++	if (result != 0)
++		goto err;
++
++	if (!bRead) {
++		if (q6common_is_instance_id_supported())
++			result = q6afe_set_params_v3(port_id, port_index, &mem_hdr, NULL, payload_size);
++		else
++			result = q6afe_set_params_v2(port_id, port_index, &mem_hdr, NULL, payload_size);
++	} else {
++		int8_t *resp = (int8_t *)tfa_cal->cal_data.kvaddr;
++
++		atomic_set(&this_afe.tfa_state, 1);
++		if (q6common_is_instance_id_supported()) {
++			result = q6afe_get_params_v3(port_id, port_index, &mem_hdr, &param_hdr);
++			resp += sizeof(struct param_hdr_v3);
++		} else {
++			result = q6afe_get_params_v2(port_id, port_index, &mem_hdr, &param_hdr);
++			resp += sizeof(struct param_hdr_v1);
++		}
++		if (result)
++			goto err;
++		memcpy(buf, resp, cmd_size);
++	}
++
++err:
++	return result;
++}
++EXPORT_SYMBOL(send_tfa_cal_apr);
++
++void send_tfa_cal_unmap_memory(void)
++{
++	int result = 0;
++
++	if (this_afe.tfa_cal.map_data.map_handle) {
++		result = afe_unmap_rtac_block(&this_afe.tfa_cal.map_data.map_handle);
++		if (result)
++			this_afe.tfa_cal.map_data.map_handle = 0;
++	}
++}
++EXPORT_SYMBOL(send_tfa_cal_unmap_memory);
++
++int send_tfa_cal_in_band(void *buf, int cmd_size)
++{
++	union afe_spkr_prot_config afe_spk_config;
++	int32_t port_id = AFE_PORT_ID_TFADSP_RX;
++
++	if (cmd_size > sizeof(afe_spk_config))
++		return -EINVAL;
++	memcpy(&afe_spk_config, buf, cmd_size);
++	afe_spk_prot_prepare(port_id, 0, AFE_PARAM_ID_TFADSP_RX_CFG,
++			     &afe_spk_config, sizeof(union afe_spkr_prot_config));
++	return 0;
++}
++EXPORT_SYMBOL(send_tfa_cal_in_band);
++
++int send_tfa_cal_set_bypass(void *buf, int cmd_size)
++{
++	union afe_spkr_prot_config afe_spk_config;
++	int32_t port_id = AFE_PORT_ID_TFADSP_RX;
++
++	if (cmd_size > sizeof(afe_spk_config))
++		return -EINVAL;
++	memcpy(&afe_spk_config, buf, cmd_size);
++	afe_spk_prot_prepare(port_id, 0, AFE_PARAM_ID_TFADSP_RX_SET_BYPASS,
++			     &afe_spk_config, sizeof(union afe_spkr_prot_config));
++	return 0;
++}
++EXPORT_SYMBOL(send_tfa_cal_set_bypass);
++
++int send_tfa_cal_set_tx_enable(void *buf, int cmd_size)
++{
++	union afe_spkr_prot_config afe_spk_config;
++	int32_t port_id = AFE_PORT_ID_TFADSP_TX;
++
++	if (cmd_size > sizeof(afe_spk_config))
++		return -EINVAL;
++	memcpy(&afe_spk_config, buf, cmd_size);
++	afe_spk_prot_prepare(port_id, 0, AFE_PARAM_ID_TFADSP_TX_SET_ENABLE,
++			     &afe_spk_config, sizeof(union afe_spkr_prot_config));
++	return 0;
++}
++EXPORT_SYMBOL(send_tfa_cal_set_tx_enable);
++
+ int __init afe_init(void)
+ {
+ 	int i = 0, ret;
