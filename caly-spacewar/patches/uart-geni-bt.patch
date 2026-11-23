@@ -1,0 +1,47 @@
+--- a/msm_geni_serial.c
++++ b/msm_geni_serial.c
+@@ -1531,10 +1531,12 @@
+ 			     "%s clock already on\n", __func__);
+ 		return ret;
+ 	}
+-	ret = msm_geni_serial_power_on(uport);
+-	if (ret) {
+-		dev_err(uport->dev, "Failed to vote clock on\n");
+-		return ret;
++	if (!pm_runtime_active(uport->dev)) {
++		ret = msm_geni_serial_power_on(uport);
++		if (ret) {
++			dev_err(uport->dev, "Failed to vote clock on\n");
++			return ret;
++		}
+ 	}
+ 	atomic_set(&port->check_wakeup_byte, 0);
+ 	complete(&port->wakeup_comp);
+@@ -1582,7 +1584,6 @@
+ 	}
+ 
+ 	port->ioctl_count--;
+-	msm_geni_serial_power_off(uport);
+ 	usage_count = atomic_read(&uport->dev->power.usage_count);
+ 	UART_LOG_DBG(port->ipc_log_pwr, uport->dev, "%s:%s ioctl:%d usage_count:%d\n",
+ 		     __func__, current->comm, port->ioctl_count, usage_count);
+@@ -4792,6 +4793,10 @@
+ 		if (msm_port->ioctl_count) {
+ 			UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
+ 				     "%s: IOCTL vote present. Resetting ioctl count\n", __func__);
++			while (msm_port->ioctl_count > 0 && pm_runtime_enabled(uport->dev)) {
++				pm_runtime_put_noidle(uport->dev);
++				msm_port->ioctl_count--;
++			}
+ 			msm_port->ioctl_count = 0;
+ 		}
+ 
+@@ -5094,7 +5099,7 @@
+ 	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
+ 			       msm_port->uart_kpi, start_time, 0, 0);
+ exit_startup:
+-	if (likely(!uart_console(uport)))
++	if (ret && likely(!uart_console(uport)))
+ 		msm_geni_serial_power_off(&msm_port->uport);
+ 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "%s: ret:%d\n", __func__, ret);
+ 
