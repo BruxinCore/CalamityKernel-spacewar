@@ -1,0 +1,53 @@
+diff --git a/icnss2/debug.c b/icnss2/debug.c
+index 596a26d..c5a6b43 100644
+--- a/icnss2/debug.c
++++ b/icnss2/debug.c
+@@ -847,7 +847,7 @@ int icnss_debugfs_create(struct icnss_priv *priv)
+ 
+ 		debugfs_create_file("fw_debug", 0600, root_dentry, priv,
+ 					&icnss_fw_debug_fops);
+-		debugfs_create_file("stats", 0600, root_dentry, priv,
++		debugfs_create_file("stats", 0444, root_dentry, priv,
+ 						&icnss_stats_fops);
+ 		debugfs_create_file("reg_read", 0600, root_dentry, priv,
+ 						&icnss_regread_fops);
+@@ -874,7 +874,7 @@ int icnss_debugfs_create(struct icnss_priv *priv)
+ 
+ 	priv->root_dentry = root_dentry;
+ 
+-	debugfs_create_file("stats", 0600, root_dentry, priv,
++	debugfs_create_file("stats", 0444, root_dentry, priv,
+ 							     &icnss_stats_fops);
+ 	return 0;
+ }
+diff --git a/icnss2/main.c b/icnss2/main.c
+index 08183cb..6d8c025 100644
+--- a/icnss2/main.c
++++ b/icnss2/main.c
+@@ -1561,6 +1561,8 @@ static int icnss_call_driver_probe(struct icnss_priv *priv)
+ 	int ret = 0;
+ 	int probe_cnt = 0;
+ 
++	pr_emerg("CALY_ICNSS: call_driver_probe ops=%px probe=%px state=0x%lx\n",
++		 priv->ops, priv->ops ? priv->ops->probe : NULL, priv->state);
+ 	if (!priv->ops || !priv->ops->probe)
+ 		return 0;
+ 
+@@ -1578,6 +1580,7 @@ static int icnss_call_driver_probe(struct icnss_priv *priv)
+ 		if (ret != -EPROBE_DEFER)
+ 			break;
+ 	}
++	pr_emerg("CALY_ICNSS: probe done ret=%d state=0x%lx cnt=%d\n", ret, priv->state, probe_cnt);
+ 	if (ret < 0) {
+ 		icnss_pr_err("Driver probe failed: %d, state: 0x%lx, probe_cnt: %d\n",
+ 			     ret, priv->state, probe_cnt);
+@@ -6437,8 +6440,7 @@ static inline void icnss_runtime_pm_deinit(struct icnss_priv *priv)
+ 
+ static inline bool icnss_use_nv_mac(struct icnss_priv *priv)
+ {
+-	return of_property_read_bool(priv->pdev->dev.of_node,
+-				     "use-nv-mac");
++	return false;
+ }
+ 
+ static void rproc_restart_level_notifier(void *data, struct rproc *rproc)
