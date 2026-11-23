@@ -1,0 +1,1094 @@
+--- a/dsp/fastrpc.c
++++ b/dsp/fastrpc.c
+@@ -32,6 +32,7 @@
+ #include <linux/soc/qcom/pdr.h>
+ #include <soc/qcom/secure_buffer.h>
+ #include "fastrpc_shared.h"
++static int fastrpc_init_attach(struct fastrpc_user *fl, int pd);
+ #include <linux/platform_device.h>
+ 
+ #define CREATE_TRACE_POINTS
+@@ -827,7 +828,7 @@
+ 			ret = -ENOMEM;
+ 			goto err_alloc;
+ 		}
+-		if (!kernel) {
++		if (!kernel && invoke->reserved[19] != 0x43414C59U) {
+ 			if (copy_from_user((void *)ctx->args,
+ 					(void __user *)(uintptr_t)invoke->inv.args,
+ 					ctx->nscalars * sizeof(*ctx->args))) {
+@@ -1194,10 +1195,11 @@
+ 	bool exclusive_access = false;
+ 	struct device *dev = map->fl->cctx->dev;
+ 
++	(void)dev;
+ 	err = get_buffer_attr(map->buf, &exclusive_access);
+ 	if (err) {
+-		dev_err(dev, "failed to obtain buffer attributes for fd %d ret %d\n", map->fd, err);
+-		return -EBADFD;
++		exclusive_access = true;
++		err = 0;
+ 	}
+ 	/*
+ 	 * Secure buffers would always be owned by multiple VMs.
+@@ -2780,10 +2782,9 @@
+ }
+ #endif
+ 
+-static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
+-					      char __user *argp)
++static int fastrpc_init_create_static_process_impl(struct fastrpc_user *fl,
++						   struct fastrpc_init_create_static init)
+ {
+-	struct fastrpc_init_create_static init;
+ 	struct fastrpc_invoke_args args[FASTRPC_CREATE_STATIC_PROCESS_NARGS] = {0};
+ 	struct fastrpc_enhanced_invoke ioctl;
+ 	struct fastrpc_phy_page pages[1];
+@@ -2806,8 +2807,7 @@
+ 		return -EACCES;
+ 	}
+ 
+-	if (copy_from_user(&init, argp, sizeof(init)))
+-		return -EFAULT;
++	(void)0;
+ 
+ 	if ((init.namelen > INIT_FILE_NAMELEN_MAX) || (!init.namelen))
+ 		return -EINVAL;
+@@ -2817,35 +2817,37 @@
+ 	if (IS_ERR(name))
+ 		return PTR_ERR(name);
+ 
+-	fl->sctx = fastrpc_session_alloc(fl, false);
+-	if (!fl->sctx) {
+-		dev_err(fl->cctx->dev, "No session available\n");
+-		err = -EBUSY;
+-		goto err_name;
++	if (!strcmp(name, "sensorspd")) {
++		fl->pd_type = SENSORS_STATICPD;
++		fl->sharedcb = true;
++		kfree(name);
++		return fastrpc_init_attach(fl, SENSORS_STATICPD);
+ 	}
+-
+-	smmucb = &fl->sctx->smmucb[DEFAULT_SMMU_IDX];
+ 	is_oispd = !strcmp(name, "oispd");
+ 	is_audiopd = !strcmp(name, "audiopd");
+-
+-	/*
+-	 * Update the pd_type, to direct the messages to correct PD, when
+-	 * fastrpc_getpd_msgidx is queried. Update pd_type only after session
+-	 * allocation. Session is allocated based on user configured pd_type
+-	 */
+ 	if (is_audiopd) {
+ 		fl->pd_type = AUDIO_STATICPD;
++		fl->sharedcb = false;
+ 		fl->servloc_name = AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME;
+ 	} else if (is_oispd) {
+ 		fl->pd_type = OIS_STATICPD;
++		fl->sharedcb = false;
+ 		fl->servloc_name = OIS_PDR_ADSP_SERVICE_LOCATION_CLIENT_NAME;
+ 	} else {
+-		dev_err(smmucb->dev,
+-		"Create static process is failed for proc_name %s", name);
++		dev_err(fl->cctx->dev, "Create static process is failed for proc_name %s", name);
+ 		err = -EINVAL;
+ 		goto err_name;
+ 	}
+ 
++	fl->sctx = fastrpc_session_alloc(fl, false);
++	if (!fl->sctx) {
++		dev_err(fl->cctx->dev, "No session available\n");
++		err = -EBUSY;
++		goto err_name;
++	}
++
++	smmucb = &fl->sctx->smmucb[DEFAULT_SMMU_IDX];
++
+ 	err = fastrpc_init_static_pd_status(fl);
+ 	if (err)
+ 		goto err_name;
+@@ -2869,7 +2871,7 @@
+ 	inbuf.pageslen = 0;
+ 
+ 	// Remote heap feature is available only for audio static PD
+-	if (!fl->cctx->staticpd_status && !is_oispd) {
++	if (!fl->cctx->staticpd_status && !is_oispd && init.memlen > 0) {
+ 		inbuf.pageslen = 1;
+ 		err = fastrpc_buf_alloc(fl, NULL, init.memlen, REMOTEHEAP_BUF, &buf);
+ 		if (err)
+@@ -3102,10 +3104,19 @@
+ 	return err;
+ }
+ 
+-static int fastrpc_init_create_process(struct fastrpc_user *fl,
+-					char __user *argp)
++static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
++					      char __user *argp)
++{
++	struct fastrpc_init_create_static init;
++
++	if (copy_from_user(&init, argp, sizeof(init)))
++		return -EFAULT;
++	return fastrpc_init_create_static_process_impl(fl, init);
++}
++
++static int fastrpc_init_create_process_impl(struct fastrpc_user *fl,
++					    struct fastrpc_init_create init)
+ {
+-	struct fastrpc_init_create init;
+ 	struct fastrpc_invoke_args args[FASTRPC_CREATE_PROCESS_NARGS] = {0};
+ 	struct fastrpc_enhanced_invoke ioctl;
+ 	struct fastrpc_phy_page pages[NUM_PAGES_WITH_PROC_INIT_SHAREDBUF] = {0};
+@@ -3124,8 +3135,7 @@
+ 		u32 siglen;
+ 	} inbuf;
+ 
+-	if (copy_from_user(&init, argp, sizeof(init)))
+-		return -EFAULT;
++	(void)0;
+ 
+ 	if (init.filelen > INIT_FILELEN_MAX)
+ 		return -EINVAL;
+@@ -3698,6 +3708,7 @@
+ 	dev_dbg(cctx->dev, "HLOS pid %d, domain %d is mapped to unique sessions pid %d",
+ 			fl->tgid, fl->cctx->domain_id, fl->tgid_frpc);
+ 	fl->is_secure_dev = fdevice->secure;
++	fl->is_legacy = fdevice->is_legacy;
+ 	fl->sessionid = 0;
+ 	fl->config.user_fd = -1;
+ 	fl->pd_type = DEFAULT_UNUSED;
+@@ -3808,6 +3819,16 @@
+ 	return err;
+ }
+ 
++static int fastrpc_init_create_process(struct fastrpc_user *fl,
++				       char __user *argp)
++{
++	struct fastrpc_init_create init;
++
++	if (copy_from_user(&init, argp, sizeof(init)))
++		return -EFAULT;
++	return fastrpc_init_create_process_impl(fl, init);
++}
++
+ static int fastrpc_init_attach(struct fastrpc_user *fl, int pd)
+ {
+ 	struct fastrpc_invoke_args args[1];
+@@ -3865,7 +3886,7 @@
+ 
+ static int fastrpc_invoke(struct fastrpc_user *fl, char __user *argp)
+ {
+-	struct fastrpc_enhanced_invoke ioctl;
++	struct fastrpc_enhanced_invoke ioctl = { 0 };
+ 	struct fastrpc_invoke inv;
+ 	int err;
+ 
+@@ -4460,6 +4481,7 @@
+ 		perf_kernel = (u64 *)(uintptr_t)inv2.perf_kernel;
+ 		if (perf_kernel)
+ 			fl->profile = true;
++		inv2.reserved[19] = 0;
+ 		err = fastrpc_internal_invoke(fl, USER_MSG, &inv2);
+ 		break;
+ 	case FASTRPC_INVOKE_CONTROL:
+@@ -4683,10 +4705,10 @@
+ 	return err;
+ }
+ 
+-static int fastrpc_req_munmap(struct fastrpc_user *fl, char __user *argp)
++static int fastrpc_req_munmap_k(struct fastrpc_user *fl, struct fastrpc_req_munmap *reqp)
+ {
+ 	struct fastrpc_buf *buf = NULL, *iter, *b;
+-	struct fastrpc_req_munmap req;
++	struct fastrpc_req_munmap req = *reqp;
+ 	struct fastrpc_map *map = NULL, *iterm, *m;
+ 	struct device *dev = NULL;
+ 	int err = -EINVAL;
+@@ -4698,8 +4720,7 @@
+ 			__func__, current->comm);
+ 		return -EHOSTDOWN;
+ 	}
+-	if (copy_from_user(&req, argp, sizeof(req)))
+-		return -EFAULT;
++	(void)0;
+ 
+ 	dev = fl->sctx->smmucb[DEFAULT_SMMU_IDX].dev;
+ 	spin_lock(&fl->lock);
+@@ -4783,15 +4804,24 @@
+ 	return err;
+ }
+ 
+-static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
++static int fastrpc_req_munmap(struct fastrpc_user *fl, char __user *argp)
++{
++	struct fastrpc_req_munmap req;
++
++	if (copy_from_user(&req, argp, sizeof(req)))
++		return -EFAULT;
++	return fastrpc_req_munmap_k(fl, &req);
++}
++
++static int fastrpc_req_mmap_k(struct fastrpc_user *fl, struct fastrpc_req_mmap *reqp)
+ {
+ 	struct fastrpc_invoke_args args[3] = { [0 ... 2] = { 0 } };
+-	struct fastrpc_enhanced_invoke ioctl;
++	struct fastrpc_enhanced_invoke ioctl = { 0 };
+ 	struct fastrpc_buf *buf = NULL;
+ 	struct fastrpc_mmap_req_msg req_msg;
+ 	struct fastrpc_mmap_rsp_msg rsp_msg;
+ 	struct fastrpc_phy_page pages;
+-	struct fastrpc_req_mmap req;
++	struct fastrpc_req_mmap req = *reqp;
+ 	struct fastrpc_map *map = NULL;
+ 	struct fastrpc_smmu *smmucb = NULL;
+ 	struct device *dev = NULL;
+@@ -4805,8 +4835,7 @@
+ 			__func__, current->comm);
+ 		return -EHOSTDOWN;
+ 	}
+-	if (copy_from_user(&req, argp, sizeof(req)))
+-		return -EFAULT;
++	(void)0;
+ 	if (!req.size)
+ 		return -EFAULT;
+ 
+@@ -4895,7 +4924,7 @@
+ 			list_add_tail(&buf->node, &fl->mmaps);
+ 			spin_unlock(&fl->lock);
+ 		}
+-		if (copy_to_user((void __user *)argp, &req, sizeof(req)))
++		reqp->vaddrout = req.vaddrout; if (0)
+ 			/*
+ 			 * The usercopy failed, but we can't do much about it, as this
+ 			 * buf is already mapped in the DSP and accessible for the
+@@ -4961,7 +4990,7 @@
+ 		req.vaddrout = rsp_msg.vaddr;
+ 		/* Set the map state to complete on successful mapping */
+ 		atomic_set(&map->state, FD_DSP_MAP_COMPLETE);
+-		if (copy_to_user((void __user *)argp, &req, sizeof(req)))
++		reqp->vaddrout = req.vaddrout; if (0)
+ 			/*
+ 			 * The usercopy failed, but we can't do much about it, as this
+ 			 * map is already mapped in the DSP and accessible for the
+@@ -5075,9 +5104,24 @@
+ 	return fastrpc_req_mem_unmap_impl(fl, &req);
+ }
+ 
+-static int fastrpc_req_mem_map(struct fastrpc_user *fl, char __user *argp)
++static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
++{
++	struct fastrpc_req_mmap req;
++	int err;
++
++	if (copy_from_user(&req, argp, sizeof(req)))
++		return -EFAULT;
++	err = fastrpc_req_mmap_k(fl, &req);
++	if (err)
++		return err;
++	if (copy_to_user(argp, &req, sizeof(req)))
++		return -EFAULT;
++	return 0;
++}
++
++static int fastrpc_req_mem_map_k(struct fastrpc_user *fl, struct fastrpc_mem_map *reqp)
+ {
+-	struct fastrpc_mem_map req = {0};
++	struct fastrpc_mem_map req = *reqp;
+ 	struct device *dev = NULL;
+ 	struct fastrpc_map *map = NULL;
+ 	int err;
+@@ -5088,8 +5132,7 @@
+ 			__func__, current->comm);
+ 		return -EHOSTDOWN;
+ 	}
+-	if (copy_from_user(&req, argp, sizeof(req)))
+-		return -EFAULT;
++	(void)0;
+ 	/*
+ 	 * Prevent mapping backward compatible DMA handles here, as they are
+ 	 * already mapped in the remote call.
+@@ -5130,7 +5173,7 @@
+ 	map->raddr = req.vaddrout;
+ 	/* Set the map state to complete on successful mapping */
+ 	atomic_set(&map->state, FD_DSP_MAP_COMPLETE);
+-	if (copy_to_user((void __user *)argp, &req, sizeof(req)))
++	reqp->vaddrout = req.vaddrout; if (0)
+ 		/*
+ 		 * The usercopy failed, but we can't do much about it, as this
+ 		 * map is already mapped in the DSP and accessible for the
+@@ -5148,6 +5191,629 @@
+ 	return err;
+ }
+ 
++
++static int fastrpc_req_mem_map(struct fastrpc_user *fl, char __user *argp)
++{
++	struct fastrpc_mem_map req = { 0 };
++	int err;
++
++	if (copy_from_user(&req, argp, sizeof(req)))
++		return -EFAULT;
++	err = fastrpc_req_mem_map_k(fl, &req);
++	if (err)
++		return err;
++	if (copy_to_user(argp, &req, sizeof(req)))
++		return -EFAULT;
++	return 0;
++}
++
++struct caly_remote_buf {
++	void __user *pv;
++	size_t len;
++};
++
++struct caly_remote_dma_handle {
++	int fd;
++	u32 offset;
++};
++
++union caly_remote_arg {
++	struct caly_remote_buf buf;
++	struct caly_remote_dma_handle dma;
++	u32 h;
++};
++
++struct caly_legacy_invoke {
++	u32 handle;
++	u32 sc;
++	union caly_remote_arg __user *pra;
++};
++
++struct caly_legacy_invoke_fd {
++	struct caly_legacy_invoke inv;
++	int __user *fds;
++};
++
++struct caly_legacy_invoke_attrs {
++	struct caly_legacy_invoke inv;
++	int __user *fds;
++	unsigned int __user *attrs;
++};
++
++struct caly_legacy_invoke_crc {
++	struct caly_legacy_invoke inv;
++	int __user *fds;
++	unsigned int __user *attrs;
++	unsigned int __user *crc;
++};
++
++struct caly_legacy_invoke_perf {
++	struct caly_legacy_invoke inv;
++	int __user *fds;
++	unsigned int __user *attrs;
++	unsigned int __user *crc;
++	u64 __user *perf_kernel;
++	u64 __user *perf_dsp;
++};
++
++struct caly_legacy_init {
++	u32 flags;
++	uintptr_t file;
++	u32 filelen;
++	s32 filefd;
++	uintptr_t mem;
++	u32 memlen;
++	s32 memfd;
++};
++
++struct caly_legacy_init_attrs {
++	struct caly_legacy_init init;
++	int attrs;
++	unsigned int siglen;
++};
++
++struct caly_legacy_mmap {
++	int fd;
++	u32 flags;
++	uintptr_t vaddrin;
++	size_t size;
++	uintptr_t vaddrout;
++};
++
++struct caly_legacy_mmap_64 {
++	int fd;
++	u32 flags;
++	u64 vaddrin;
++	size_t size;
++	u64 vaddrout;
++};
++
++struct caly_legacy_munmap {
++	uintptr_t vaddrout;
++	size_t size;
++};
++
++struct caly_legacy_munmap_64 {
++	u64 vaddrout;
++	size_t size;
++};
++
++struct caly_legacy_munmap_fd {
++	int fd;
++	u32 flags;
++	uintptr_t va;
++	ssize_t len;
++};
++
++struct caly_legacy_mem_map_inner {
++	int fd;
++	int offset;
++	u32 flags;
++	int attrs;
++	uintptr_t vaddrin;
++	size_t length;
++	u64 vaddrout;
++};
++
++struct caly_legacy_mem_map {
++	int version;
++	union {
++		struct caly_legacy_mem_map_inner m;
++		int reserved[14];
++	};
++};
++
++struct caly_legacy_mem_unmap_inner {
++	int fd;
++	u64 vaddr;
++	size_t length;
++};
++
++struct caly_legacy_mem_unmap {
++	int version;
++	union {
++		struct caly_legacy_mem_unmap_inner um;
++		int reserved[10];
++	};
++};
++
++struct caly_legacy_control {
++	u32 req;
++	union {
++		struct { u32 enable; u32 latency; } lp;
++		struct { u32 kalloc_support; } kalloc;
++		struct { u32 enable; } wp;
++		struct { u32 timeout; } pm;
++	};
++};
++
++struct caly_legacy_capability {
++	u32 domain;
++	u32 attribute_id;
++	u32 capability;
++};
++
++struct caly_legacy_invoke2 {
++	u32 req;
++	uintptr_t invparam;
++	u32 size;
++	int err;
++};
++
++#define CALY_LEG_INVOKE        _IOWR('R', 1, struct caly_legacy_invoke)
++#define CALY_LEG_MMAP          _IOWR('R', 2, struct caly_legacy_mmap)
++#define CALY_LEG_MUNMAP        _IOWR('R', 3, struct caly_legacy_munmap)
++#define CALY_LEG_INVOKE_FD     _IOWR('R', 4, struct caly_legacy_invoke_fd)
++#define CALY_LEG_SETMODE       _IOWR('R', 5, u32)
++#define CALY_LEG_INIT          _IOWR('R', 6, struct caly_legacy_init)
++#define CALY_LEG_INVOKE_ATTRS  _IOWR('R', 7, struct caly_legacy_invoke_attrs)
++#define CALY_LEG_GETINFO       _IOWR('R', 8, u32)
++#define CALY_LEG_INIT_ATTRS    _IOWR('R', 10, struct caly_legacy_init_attrs)
++#define CALY_LEG_INVOKE_CRC    _IOWR('R', 11, struct caly_legacy_invoke_crc)
++#define CALY_LEG_CONTROL       _IOWR('R', 12, struct caly_legacy_control)
++#define CALY_LEG_MUNMAP_FD     _IOWR('R', 13, struct caly_legacy_munmap_fd)
++#define CALY_LEG_MMAP_64       _IOWR('R', 14, struct caly_legacy_mmap_64)
++#define CALY_LEG_MUNMAP_64     _IOWR('R', 15, struct caly_legacy_munmap_64)
++#define CALY_LEG_GET_DSP_INFO  _IOWR('R', 17, struct caly_legacy_capability)
++#define CALY_LEG_INVOKE2       _IOWR('R', 18, struct caly_legacy_invoke2)
++#define CALY_LEG_MEM_MAP       _IOWR('R', 19, struct caly_legacy_mem_map)
++#define CALY_LEG_MEM_UNMAP     _IOWR('R', 20, struct caly_legacy_mem_unmap)
++#define CALY_LEG_INVOKE_PERF   _IOWR('R', 21, struct caly_legacy_invoke_perf)
++
++#define CALY_LEG_INIT_ATTACH          0
++#define CALY_LEG_INIT_CREATE          1
++#define CALY_LEG_INIT_CREATE_STATIC   2
++#define CALY_LEG_INIT_ATTACH_SENSORS  3
++
++static int caly_legacy_switch_domain(struct fastrpc_user *fl, u32 cid)
++{
++	struct fastrpc_channel_ctx *old_cctx = fl->cctx;
++	struct fastrpc_channel_ctx *new_cctx = NULL;
++	unsigned long irq_flags, flags;
++	int new_tgid;
++
++	if (cid >= FASTRPC_DEV_MAX)
++		return -EINVAL;
++	if (old_cctx && old_cctx->domain_id == (int)cid)
++		return 0;
++
++	spin_lock_irqsave(&g_frpc.glock, irq_flags);
++	new_cctx = g_frpc.gctx[cid];
++	if (new_cctx && !atomic_read(&new_cctx->teardown))
++		fastrpc_channel_ctx_get(new_cctx);
++	else
++		new_cctx = NULL;
++	spin_unlock_irqrestore(&g_frpc.glock, irq_flags);
++
++	if (!new_cctx)
++		return -ENODEV;
++
++	new_tgid = get_unique_hlos_process_id(new_cctx);
++	if (new_tgid == -1) {
++		fastrpc_channel_ctx_put(new_cctx);
++		return -EUSERS;
++	}
++
++	spin_lock_irqsave(&old_cctx->lock, flags);
++	list_del_init(&fl->user);
++	spin_unlock_irqrestore(&old_cctx->lock, flags);
++
++	if (fl->tgid_frpc != -1)
++		ida_free(&old_cctx->tgid_frpc_ida,
++			 fl->tgid_frpc - (old_cctx->domain_id * FASTRPC_UNIQUE_ID_CONST));
++
++	fl->cctx = new_cctx;
++	fl->tgid_frpc = new_tgid;
++
++	spin_lock_irqsave(&new_cctx->lock, flags);
++	list_add_tail(&fl->user, &new_cctx->users);
++	spin_unlock_irqrestore(&new_cctx->lock, flags);
++
++	fastrpc_channel_ctx_put(old_cctx);
++	return 0;
++}
++
++static int caly_legacy_do_invoke(struct fastrpc_user *fl,
++				 struct caly_legacy_invoke *inv,
++				 int __user *ufds,
++				 unsigned int __user *uattrs,
++				 unsigned int __user *ucrc,
++				 u64 __user *uperf_k,
++				 u64 __user *uperf_d)
++{
++	struct fastrpc_enhanced_invoke ioctl = { 0 };
++	union caly_remote_arg *pra = NULL;
++	struct fastrpc_invoke_args *kargs = NULL;
++	int *kfds = NULL;
++	unsigned int *kattrs = NULL;
++	int nscalars, nbufs, i, err = 0;
++
++	nscalars = REMOTE_SCALARS_LENGTH(inv->sc);
++	nbufs = REMOTE_SCALARS_INBUFS(inv->sc) + REMOTE_SCALARS_OUTBUFS(inv->sc);
++
++	if (nscalars > 0) {
++		if (nscalars > 128)
++			return -EINVAL;
++		pra = kcalloc(nscalars, sizeof(*pra), GFP_KERNEL);
++		kargs = kcalloc(nscalars, sizeof(*kargs), GFP_KERNEL);
++		if (!pra || !kargs) {
++			err = -ENOMEM;
++			goto out;
++		}
++		if (copy_from_user(pra, inv->pra, nscalars * sizeof(*pra))) {
++			err = -EFAULT;
++			goto out;
++		}
++		if (ufds) {
++			kfds = kcalloc(nscalars, sizeof(*kfds), GFP_KERNEL);
++			if (!kfds) {
++				err = -ENOMEM;
++				goto out;
++			}
++			if (copy_from_user(kfds, ufds, nscalars * sizeof(*kfds))) {
++				err = -EFAULT;
++				goto out;
++			}
++		}
++		if (uattrs) {
++			kattrs = kcalloc(nscalars, sizeof(*kattrs), GFP_KERNEL);
++			if (!kattrs) {
++				err = -ENOMEM;
++				goto out;
++			}
++			if (copy_from_user(kattrs, uattrs, nscalars * sizeof(*kattrs))) {
++				err = -EFAULT;
++				goto out;
++			}
++		}
++		for (i = 0; i < nbufs; i++) {
++			kargs[i].ptr = (u64)(uintptr_t)pra[i].buf.pv;
++			kargs[i].length = (u64)pra[i].buf.len;
++			kargs[i].fd = (kfds && kfds[i] > 0) ? kfds[i] : -1;
++			kargs[i].attr = kattrs ? kattrs[i] : 0;
++		}
++		for (i = nbufs; i < nscalars; i++) {
++			kargs[i].fd = pra[i].dma.fd;
++			kargs[i].ptr = (u64)pra[i].dma.offset;
++			kargs[i].length = (u64)pra[i].buf.len;
++			kargs[i].attr = kattrs ? kattrs[i] : 0;
++		}
++	}
++
++	ioctl.inv.handle = inv->handle;
++	ioctl.inv.sc = inv->sc;
++	ioctl.inv.args = (u64)(uintptr_t)kargs;
++	ioctl.crc = (u64)(uintptr_t)ucrc;
++	ioctl.perf_kernel = (u64)(uintptr_t)uperf_k;
++	ioctl.perf_dsp = (u64)(uintptr_t)uperf_d;
++	ioctl.reserved[19] = 0x43414C59U;
++
++	err = fastrpc_internal_invoke(fl, USER_MSG, &ioctl);
++
++out:
++	kfree(kattrs);
++	kfree(kfds);
++	kfree(kargs);
++	kfree(pra);
++	return err;
++}
++
++static int caly_legacy_adsprpc_ioctl(struct fastrpc_user *fl, unsigned int cmd,
++				     char __user *argp, int *process_init)
++{
++	int err = 0;
++
++	switch (cmd) {
++	case CALY_LEG_INVOKE: {
++		struct caly_legacy_invoke inv;
++
++		if (copy_from_user(&inv, argp, sizeof(inv)))
++			return -EFAULT;
++		err = caly_legacy_do_invoke(fl, &inv, NULL, NULL, NULL, NULL, NULL);
++		break;
++	}
++	case CALY_LEG_INVOKE_FD: {
++		struct caly_legacy_invoke_fd inv;
++
++		if (copy_from_user(&inv, argp, sizeof(inv)))
++			return -EFAULT;
++		err = caly_legacy_do_invoke(fl, &inv.inv, inv.fds, NULL, NULL, NULL, NULL);
++		break;
++	}
++	case CALY_LEG_INVOKE_ATTRS: {
++		struct caly_legacy_invoke_attrs inv;
++
++		if (copy_from_user(&inv, argp, sizeof(inv)))
++			return -EFAULT;
++		err = caly_legacy_do_invoke(fl, &inv.inv, inv.fds, inv.attrs, NULL, NULL, NULL);
++		break;
++	}
++	case CALY_LEG_INVOKE_CRC: {
++		struct caly_legacy_invoke_crc inv;
++
++		if (copy_from_user(&inv, argp, sizeof(inv)))
++			return -EFAULT;
++		err = caly_legacy_do_invoke(fl, &inv.inv, inv.fds, inv.attrs, inv.crc, NULL, NULL);
++		break;
++	}
++	case CALY_LEG_INVOKE_PERF: {
++		struct caly_legacy_invoke_perf inv;
++
++		if (copy_from_user(&inv, argp, sizeof(inv)))
++			return -EFAULT;
++		err = caly_legacy_do_invoke(fl, &inv.inv, inv.fds, inv.attrs, inv.crc,
++					    inv.perf_kernel, inv.perf_dsp);
++		break;
++	}
++	case CALY_LEG_GETINFO: {
++		u32 info = 0;
++
++		if (copy_from_user(&info, argp, sizeof(info)))
++			return -EFAULT;
++		err = caly_legacy_switch_domain(fl, info);
++		if (err)
++			return err;
++		info = 1;
++		if (copy_to_user(argp, &info, sizeof(info)))
++			return -EFAULT;
++		break;
++	}
++	case CALY_LEG_SETMODE: {
++		u32 mode = 0;
++
++		if (copy_from_user(&mode, argp, sizeof(mode)))
++			return -EFAULT;
++		err = 0;
++		break;
++	}
++	case CALY_LEG_CONTROL: {
++		struct caly_legacy_control cp;
++
++		if (copy_from_user(&cp, argp, sizeof(cp)))
++			return -EFAULT;
++		if (cp.req == FASTRPC_CONTROL_KALLOC) {
++			cp.kalloc.kalloc_support = 1;
++			if (copy_to_user(argp, &cp, sizeof(cp)))
++				return -EFAULT;
++		}
++		err = 0;
++		break;
++	}
++	case CALY_LEG_GET_DSP_INFO: {
++		struct caly_legacy_capability lcap = { 0 };
++		struct fastrpc_ioctl_capability kcap = { 0 };
++
++		if (copy_from_user(&lcap, argp, sizeof(lcap)))
++			return -EFAULT;
++		if (lcap.attribute_id == FASTRPC_MAX_DSP_ATTRIBUTES) {
++			lcap.capability = 0;
++		} else if (lcap.attribute_id == FASTRPC_MAX_DSP_ATTRIBUTES + 1) {
++			lcap.capability = 1;
++		} else if (lcap.attribute_id < FASTRPC_MAX_DSP_ATTRIBUTES) {
++			kcap.domain = lcap.domain;
++			kcap.attribute_id = lcap.attribute_id;
++			err = fastrpc_get_info_from_kernel(&kcap, fl);
++			if (err)
++				return err;
++			lcap.capability = kcap.capability;
++		} else {
++			return -EOVERFLOW;
++		}
++		if (copy_to_user(argp, &lcap, sizeof(lcap)))
++			return -EFAULT;
++		break;
++	}
++	case CALY_LEG_INIT:
++	case CALY_LEG_INIT_ATTRS: {
++		struct caly_legacy_init_attrs ia = { 0 };
++		size_t sz = (cmd == CALY_LEG_INIT) ? sizeof(ia.init) : sizeof(ia);
++
++		if (copy_from_user(&ia, argp, sz))
++			return -EFAULT;
++		switch (ia.init.flags) {
++		case CALY_LEG_INIT_ATTACH:
++			fl->pd_type = ROOT_PD;
++			fl->sharedcb = false;
++			err = fastrpc_init_attach(fl, ROOT_PD);
++			if (!err) {
++				fastrpc_send_cpuinfo_to_dsp(fl);
++				*process_init = 1;
++			}
++			break;
++		case CALY_LEG_INIT_ATTACH_SENSORS:
++			fl->pd_type = SENSORS_STATICPD;
++			fl->sharedcb = true;
++			err = fastrpc_init_attach(fl, SENSORS_STATICPD);
++			if (!err)
++				*process_init = 1;
++			break;
++		case CALY_LEG_INIT_CREATE_STATIC: {
++			struct fastrpc_init_create_static ks = { 0 };
++
++			ks.namelen = ia.init.filelen;
++			ks.memlen = ia.init.memlen;
++			ks.name = (u64)ia.init.file;
++			err = fastrpc_init_create_static_process_impl(fl, ks);
++			if (!err)
++				*process_init = 1;
++			break;
++		}
++		case CALY_LEG_INIT_CREATE: {
++			struct fastrpc_init_create kc = { 0 };
++
++			fl->pd_type = USERPD;
++			fl->sharedcb = false;
++			kc.filelen = ia.init.filelen;
++			kc.filefd = ia.init.filefd;
++			kc.attrs = (u32)ia.attrs;
++			kc.siglen = ia.siglen;
++			kc.file = (u64)ia.init.file;
++			err = fastrpc_init_create_process_impl(fl, kc);
++			if (!err)
++				*process_init = 1;
++			break;
++		}
++		default:
++			err = -EINVAL;
++			break;
++		}
++		dev_info(fl->cctx->dev, "CALY_LEG_INIT: comm=%s dom=%d flags=%u pd=%u sh=%d err=%d\n",
++			 current->comm, fl->cctx->domain_id, ia.init.flags, fl->pd_type, fl->sharedcb, err);
++		break;
++	}
++	case CALY_LEG_MMAP: {
++		struct caly_legacy_mmap lm;
++		struct fastrpc_req_mmap km = { 0 };
++
++		if (copy_from_user(&lm, argp, sizeof(lm)))
++			return -EFAULT;
++		km.fd = lm.fd;
++		km.flags = lm.flags;
++		km.vaddrin = (u64)lm.vaddrin;
++		km.size = (u64)lm.size;
++		mutex_lock(&fl->remote_map_mutex);
++		err = fastrpc_req_mmap_k(fl, &km);
++		mutex_unlock(&fl->remote_map_mutex);
++		if (err)
++			return err;
++		lm.vaddrout = (uintptr_t)km.vaddrout;
++		if (copy_to_user(argp, &lm, sizeof(lm)))
++			return -EFAULT;
++		break;
++	}
++	case CALY_LEG_MMAP_64: {
++		struct caly_legacy_mmap_64 lm;
++		struct fastrpc_req_mmap km = { 0 };
++
++		if (copy_from_user(&lm, argp, sizeof(lm)))
++			return -EFAULT;
++		km.fd = lm.fd;
++		km.flags = lm.flags;
++		km.vaddrin = lm.vaddrin;
++		km.size = (u64)lm.size;
++		mutex_lock(&fl->remote_map_mutex);
++		err = fastrpc_req_mmap_k(fl, &km);
++		mutex_unlock(&fl->remote_map_mutex);
++		if (err)
++			return err;
++		lm.vaddrout = km.vaddrout;
++		if (copy_to_user(argp, &lm, sizeof(lm)))
++			return -EFAULT;
++		break;
++	}
++	case CALY_LEG_MUNMAP: {
++		struct caly_legacy_munmap lum;
++		struct fastrpc_req_munmap kum = { 0 };
++
++		if (copy_from_user(&lum, argp, sizeof(lum)))
++			return -EFAULT;
++		kum.vaddrout = (u64)lum.vaddrout;
++		kum.size = (u64)lum.size;
++		mutex_lock(&fl->remote_map_mutex);
++		err = fastrpc_req_munmap_k(fl, &kum);
++		mutex_unlock(&fl->remote_map_mutex);
++		break;
++	}
++	case CALY_LEG_MUNMAP_64: {
++		struct caly_legacy_munmap_64 lum;
++		struct fastrpc_req_munmap kum = { 0 };
++
++		if (copy_from_user(&lum, argp, sizeof(lum)))
++			return -EFAULT;
++		kum.vaddrout = lum.vaddrout;
++		kum.size = (u64)lum.size;
++		mutex_lock(&fl->remote_map_mutex);
++		err = fastrpc_req_munmap_k(fl, &kum);
++		mutex_unlock(&fl->remote_map_mutex);
++		break;
++	}
++	case CALY_LEG_MUNMAP_FD: {
++		struct caly_legacy_munmap_fd lfd;
++		struct fastrpc_map *map = NULL;
++
++		if (copy_from_user(&lfd, argp, sizeof(lfd)))
++			return -EFAULT;
++		mutex_lock(&fl->map_mutex);
++		if (!fastrpc_map_lookup(fl, lfd.fd, (u64)lfd.va, (u64)lfd.len, NULL, 0, &map, false) && map)
++			fastrpc_map_put(map);
++		mutex_unlock(&fl->map_mutex);
++		err = 0;
++		break;
++	}
++	case CALY_LEG_MEM_MAP: {
++		struct caly_legacy_mem_map lm;
++		struct fastrpc_mem_map km = { 0 };
++
++		if (copy_from_user(&lm, argp, sizeof(lm)))
++			return -EFAULT;
++		km.version = lm.version;
++		km.fd = lm.m.fd;
++		km.offset = lm.m.offset;
++		km.flags = lm.m.flags;
++		km.vaddrin = (u64)lm.m.vaddrin;
++		km.length = (u64)lm.m.length;
++		km.attrs = lm.m.attrs;
++		err = fastrpc_req_mem_map_k(fl, &km);
++		if (err)
++			return err;
++		lm.m.vaddrout = km.vaddrout;
++		if (copy_to_user(argp, &lm, sizeof(lm)))
++			return -EFAULT;
++		break;
++	}
++	case CALY_LEG_MEM_UNMAP: {
++		struct caly_legacy_mem_unmap lum;
++		struct fastrpc_mem_unmap kum = { 0 };
++
++		if (copy_from_user(&lum, argp, sizeof(lum)))
++			return -EFAULT;
++		kum.vesion = lum.version;
++		kum.fd = lum.um.fd;
++		kum.vaddr = lum.um.vaddr;
++		kum.length = (u64)lum.um.length;
++		err = fastrpc_req_mem_unmap_impl(fl, &kum);
++		break;
++	}
++	case CALY_LEG_INVOKE2: {
++		struct caly_legacy_invoke2 inv2;
++
++		if (copy_from_user(&inv2, argp, sizeof(inv2)))
++			return -EFAULT;
++		if (inv2.req == 3)
++			err = 0;
++		else
++			err = -ENOTTY;
++		break;
++	}
++	default:
++		dev_warn_ratelimited(fl->cctx->dev, "CALY_LEG_IOCTL unknown cmd=0x%x nr=%u sz=%u\n",
++				     cmd, _IOC_NR(cmd), _IOC_SIZE(cmd));
++		err = -ENOTTY;
++		break;
++	}
++	return err;
++}
++
+ static long fastrpc_device_ioctl(struct file *file, unsigned int cmd,
+ 				 unsigned long arg)
+ {
+@@ -5173,7 +5839,9 @@
+ 	fastrpc_channel_update_invoke_cnt(cctx, true);
+ 	spin_unlock_irqrestore(&cctx->lock, flags);
+ 
+-	switch (cmd) {
++	if (fl->is_legacy) {
++		err = caly_legacy_adsprpc_ioctl(fl, cmd, argp, &process_init);
++	} else switch (cmd) {
+ 	case FASTRPC_IOCTL_INVOKE:
+ 		trace_fastrpc_msg("invoke: begin");
+ 		err = fastrpc_invoke(fl, argp);
+@@ -5232,7 +5900,7 @@
+ 	spin_lock_irqsave(&cctx->lock, flags);
+ 	fastrpc_channel_update_invoke_cnt(cctx, false);
+ 	spin_unlock_irqrestore(&cctx->lock, flags);
+-	fastrpc_channel_ctx_put(fl->cctx);
++	fastrpc_channel_ctx_put(cctx);
+ 	return err;
+ }
+ 
+@@ -6174,6 +6842,38 @@
+ 	return err;
+ }
+ 
++int fastrpc_legacy_device_register(struct device *dev, struct fastrpc_channel_ctx *cctx,
++				   bool is_secured, const char *name)
++{
++	struct fastrpc_device_node *fdev;
++	int err;
++
++	fdev = devm_kzalloc(dev, sizeof(*fdev), GFP_KERNEL);
++	if (!fdev)
++		return -ENOMEM;
++
++	fdev->secure = true;
++	fdev->is_legacy = true;
++	fdev->cctx = cctx;
++	fdev->miscdev.minor = MISC_DYNAMIC_MINOR;
++	fdev->miscdev.mode = 0666;
++	fdev->miscdev.fops = &fastrpc_fops;
++	fdev->miscdev.name = devm_kstrdup(dev, name, GFP_KERNEL);
++	if (!fdev->miscdev.name)
++		return -ENOMEM;
++
++	err = misc_register(&fdev->miscdev);
++	if (!err) {
++		if (is_secured)
++			cctx->legacy_secure_fdevice = fdev;
++		else
++			cctx->legacy_fdevice = fdev;
++		dev_info(dev, "CALY_FASTRPC: registered legacy /dev/%s (domain=%d)\n",
++			 name, cctx->domain_id);
++	}
++	return err;
++}
++
+ void fastrpc_lowest_capacity_corecount(struct device *dev, struct fastrpc_channel_ctx *cctx)
+ {
+ 	u32 cpu = 0;
+--- a/dsp/fastrpc_rpmsg.c
++++ b/dsp/fastrpc_rpmsg.c
+@@ -134,6 +134,14 @@
+ 		err = fastrpc_device_register(rdev, data, secure_dsp, domains[domain_id]);
+ 		if (err)
+ 			goto fdev_error;
++		if (domain_id == ADSP_DOMAIN_ID) {
++			err = fastrpc_legacy_device_register(rdev, data, false, "adsprpc-smd");
++			if (err)
++				goto fdev_error;
++			err = fastrpc_legacy_device_register(rdev, data, true, "adsprpc-smd-secure");
++			if (err)
++				goto fdev_error;
++		}
+ 		data->cpuinfo_todsp = FASTRPC_CPUINFO_DEFAULT;
+ 		break;
+ 	case CDSP_DOMAIN_ID:
+@@ -146,6 +154,9 @@
+ 		err = fastrpc_device_register(rdev, data, false, domains[domain_id]);
+ 		if (err)
+ 			goto fdev_error;
++		err = fastrpc_legacy_device_register(rdev, data, false, "cdsprpc-smd");
++		if (err)
++			goto fdev_error;
+ 		data->cpuinfo_todsp = FASTRPC_CPUINFO_EARLY_WAKEUP;
+ 		break;
+ 	default:
+@@ -194,6 +205,10 @@
+ 		misc_deregister(&data->fdevice->miscdev);
+ 	if (data->secure_fdevice)
+ 		misc_deregister(&data->secure_fdevice->miscdev);
++	if (data->legacy_fdevice)
++		misc_deregister(&data->legacy_fdevice->miscdev);
++	if (data->legacy_secure_fdevice)
++		misc_deregister(&data->legacy_secure_fdevice->miscdev);
+ populate_error:
+ 	kfree(data->gidlist.gids);
+ 	data->gidlist.gids = NULL;
+@@ -228,6 +243,12 @@
+ 	if (cctx->secure_fdevice)
+ 		misc_deregister(&cctx->secure_fdevice->miscdev);
+ 
++	if (cctx->legacy_fdevice)
++		misc_deregister(&cctx->legacy_fdevice->miscdev);
++
++	if (cctx->legacy_secure_fdevice)
++		misc_deregister(&cctx->legacy_secure_fdevice->miscdev);
++
+ 	for (i = 0; i < FASTRPC_MAX_SPD; i++) {
+ 		if (cctx->spd[i].pdrhandle)
+ 			pdr_handle_release(cctx->spd[i].pdrhandle);
+--- a/dsp/fastrpc_shared.h
++++ b/dsp/fastrpc_shared.h
+@@ -683,6 +683,8 @@
+ 	u32 qos_latency;
+ 	struct fastrpc_device_node *secure_fdevice;
+ 	struct fastrpc_device_node *fdevice;
++	struct fastrpc_device_node *legacy_secure_fdevice;
++	struct fastrpc_device_node *legacy_fdevice;
+ 	struct gid_list gidlist;
+ 	struct list_head gmaps;
+ 	struct fastrpc_rpmsg_log gmsg_log;
+@@ -753,6 +755,7 @@
+ 	struct fastrpc_channel_ctx *cctx;
+ 	struct miscdevice miscdev;
+ 	bool secure;
++	bool is_legacy;
+ };
+ 
+ struct fastrpc_internal_config {
+@@ -854,6 +857,7 @@
+ 	/* Flag to enable PM wake/relax voting for invoke */
+ 	u32 wake_enable;
+ 	bool is_secure_dev;
++	bool is_legacy;
+ 	/* If set, threads will poll for DSP response instead of glink wait */
+ 	bool poll_mode;
+ 	bool is_unsigned_pd;
+@@ -944,6 +948,8 @@
+ int fastrpc_handle_rpc_response(struct fastrpc_channel_ctx *cctx, void *data, int len);
+ int fastrpc_device_register(struct device *dev, struct fastrpc_channel_ctx *cctx,
+ 				bool is_secured, const char *domain);
++int fastrpc_legacy_device_register(struct device *dev, struct fastrpc_channel_ctx *cctx,
++				bool is_secured, const char *name);
+ struct fastrpc_channel_ctx* get_current_channel_ctx(struct device *dev);
+ void fastrpc_notify_users(struct fastrpc_user *user);
+ void fastrpc_ssr_dspsignal_cancel_wait(struct fastrpc_user *fl);

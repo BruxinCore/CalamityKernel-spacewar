@@ -1,0 +1,27 @@
+--- a/qcom_q6v5_pas.c
++++ b/qcom_q6v5_pas.c
+@@ -895,15 +895,19 @@
+ 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
+ 
+ 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "exit");
+-	if (ret)
+-		panic("Panicking, auth and reset failed for remoteproc %s ret=%d\n",
+-				rproc->name, ret);
++	if (ret) {
++		dev_err(adsp->dev, "CALY_PAS: auth and reset failed for %s ret=%d\n",
++			rproc->name, ret);
++		goto release_pas_metadata;
++	}
+ 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "exit");
+ 
+ 	if (!qcom_pil_timeouts_disabled()) {
+ 		ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
+-		if (rproc->recovery_disabled && ret)
+-			panic("Panicking, remoteproc %s failed to bootup.\n", adsp->rproc->name);
++		if (rproc->recovery_disabled && ret) {
++			dev_err(adsp->dev, "CALY_PAS: remoteproc %s failed to bootup ret=%d\n", adsp->rproc->name, ret);
++			goto release_pas_metadata;
++		}
+ 		else if (ret == -ETIMEDOUT) {
+ 			dev_err(adsp->dev, "start timed out\n");
+ 			goto release_pas_metadata;
