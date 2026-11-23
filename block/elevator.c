@@ -568,7 +568,11 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
 	    !blk_mq_is_shared_tags(q->tag_set->flags))
 		return NULL;
 
+#ifdef CONFIG_MQ_IOSCHED_SSG
+	return elevator_find_get("ssg");
+#else
 	return elevator_find_get("mq-deadline");
+#endif
 }
 
 /*
@@ -740,6 +744,8 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 		return count;
 
 	strscpy(elevator_name, buf, sizeof(elevator_name));
+	if (!strcmp(strstrip(elevator_name), "bfq"))
+		strscpy(elevator_name, "ssg", sizeof(elevator_name));
 	ret = elevator_change(disk->queue, strstrip(elevator_name));
 	if (!ret)
 		return count;
