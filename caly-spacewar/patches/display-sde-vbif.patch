@@ -1,0 +1,231 @@
+diff --git a/msm/dsi/dsi_ctrl.c b/msm/dsi/dsi_ctrl.c
+index e79e76a..fa96ddc 100644
+--- a/msm/dsi/dsi_ctrl.c
++++ b/msm/dsi/dsi_ctrl.c
+@@ -397,12 +397,36 @@ static void dsi_ctrl_dma_cmd_wait_for_done(struct dsi_ctrl *dsi_ctrl)
+ 			DSI_CTRL_WARN(dsi_ctrl,
+ 					"dma_tx done but irq not triggered\n");
+ 		} else {
++			static int caly_dsi_err_cnt;
+ 			SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_ERROR);
++			if (caly_dsi_err_cnt < 6) {
++				void __iomem *b = dsi_ctrl->hw.base;
++				caly_dsi_err_cnt++;
++				pr_emerg("CALY_DSI_ERR#%d: st=%#x CTRL=%#x STAT=%#x FIFO=%#x DMAC=%#x OFF=%#x LEN=%#x TRIG=%#x LANE=%#x INT=%#x CLK=%#x iova=%#x\n",
++					caly_dsi_err_cnt, status,
++					readl_relaxed(b + 0x04), readl_relaxed(b + 0x08),
++					readl_relaxed(b + 0x0c), readl_relaxed(b + 0x3c),
++					readl_relaxed(b + 0x48), readl_relaxed(b + 0x4c),
++					readl_relaxed(b + 0x84), readl_relaxed(b + 0xa8),
++					readl_relaxed(b + 0x110), readl_relaxed(b + 0x11c),
++					dsi_ctrl->cmd_buffer_iova);
++			}
+ 			DSI_CTRL_ERR(dsi_ctrl,
+ 					"Command transfer failed\n");
+ 		}
+ 		dsi_ctrl_disable_status_interrupt(dsi_ctrl,
+ 					DSI_SINT_CMD_MODE_DMA_DONE);
++	} else {
++		static int caly_dsi_ok_cnt;
++		if (caly_dsi_ok_cnt < 4) {
++			void __iomem *b = dsi_ctrl->hw.base;
++			caly_dsi_ok_cnt++;
++			pr_emerg("CALY_DSI_OK#%d: ret=%d CTRL=%#x DMAC=%#x OFF=%#x LEN=%#x LANE=%#x CLK=%#x\n",
++				caly_dsi_ok_cnt, ret,
++				readl_relaxed(b + 0x04), readl_relaxed(b + 0x3c),
++				readl_relaxed(b + 0x48), readl_relaxed(b + 0x4c),
++				readl_relaxed(b + 0xa8), readl_relaxed(b + 0x11c));
++		}
+ 	}
+ 	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_EXIT);
+ 
+diff --git a/msm/msm_atomic.c b/msm/msm_atomic.c
+index 054d273..7d8dd9b 100644
+--- a/msm/msm_atomic.c
++++ b/msm/msm_atomic.c
+@@ -801,10 +801,15 @@ int msm_atomic_commit(struct drm_device *dev,
+ 	}
+ 
+ 	SDE_ATRACE_BEGIN("atomic_commit");
+-	ret = drm_atomic_helper_prepare_planes(dev, state);
+-	if (ret) {
+-		SDE_ATRACE_END("atomic_commit");
+-		return ret;
++	{
++		static atomic_t caly_cmt_cnt = ATOMIC_INIT(20);
++		ret = drm_atomic_helper_prepare_planes(dev, state);
++		if (ret || atomic_dec_if_positive(&caly_cmt_cnt) >= 0)
++			pr_emerg("CALY_DRM: atomic_commit nonblock=%d prep_ret=%d comm=%s\n", nonblock, ret, current->comm);
++		if (ret) {
++			SDE_ATRACE_END("atomic_commit");
++			return ret;
++		}
+ 	}
+ 
+ 	c = commit_init(state, nonblock);
+diff --git a/msm/msm_drv.c b/msm/msm_drv.c
+index 1d6f7c5..3891674 100644
+--- a/msm/msm_drv.c
++++ b/msm/msm_drv.c
+@@ -158,12 +158,19 @@ static int msm_atomic_check(struct drm_device *dev,
+ {
+ 	struct msm_drm_private *priv;
+ 
+-	priv = dev->dev_private;
+-	if (priv && priv->kms && priv->kms->funcs &&
+-			priv->kms->funcs->atomic_check)
+-		return priv->kms->funcs->atomic_check(priv->kms, state);
+-
+-	return drm_atomic_helper_check(dev, state);
++	{
++		int ret;
++		static atomic_t caly_chk_cnt = ATOMIC_INIT(25);
++		priv = dev->dev_private;
++		if (priv && priv->kms && priv->kms->funcs &&
++				priv->kms->funcs->atomic_check)
++			ret = priv->kms->funcs->atomic_check(priv->kms, state);
++		else
++			ret = drm_atomic_helper_check(dev, state);
++		if (ret || atomic_dec_if_positive(&caly_chk_cnt) >= 0)
++			pr_emerg("CALY_DRM: atomic_check ret=%d comm=%s\n", ret, current->comm);
++		return ret;
++	}
+ }
+ 
+ static const struct drm_mode_config_funcs mode_config_funcs = {
+@@ -1844,6 +1851,24 @@ static const struct drm_ioctl_desc msm_ioctls[] = {
+ 			DRM_UNLOCKED),
+ };
+ 
++static long caly_drm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
++{
++	long ret = drm_ioctl(filp, cmd, arg);
++	unsigned int nr = _IOC_NR(cmd);
++	if (ret < 0) {
++		static atomic_t fail_cnt = ATOMIC_INIT(60);
++		if (atomic_dec_if_positive(&fail_cnt) >= 0)
++			pr_emerg("CALY_DRM_IOCTL FAIL comm=%s cmd=0x%x nr=0x%x ret=%ld\n",
++				current->comm, cmd, nr, ret);
++	} else if (nr == 0x2e || nr == 0x3a || nr == 0xb8 || nr == 0xbc || (nr >= 0x40 && nr < 0x80)) {
++		static atomic_t ok_cnt = ATOMIC_INIT(30);
++		if (atomic_dec_if_positive(&ok_cnt) >= 0)
++			pr_emerg("CALY_DRM_IOCTL OK comm=%s cmd=0x%x nr=0x%x\n",
++				current->comm, cmd, nr);
++	}
++	return ret;
++}
++
+ static const struct file_operations fops = {
+ 	.owner              = THIS_MODULE,
+ 	.open               = drm_open,
+@@ -1851,7 +1876,7 @@ static const struct file_operations fops = {
+ #if (KERNEL_VERSION(6, 10, 0) <= LINUX_VERSION_CODE)
+ 	.fop_flags          = FOP_UNSIGNED_OFFSET,
+ #endif
+-	.unlocked_ioctl     = drm_ioctl,
++	.unlocked_ioctl     = caly_drm_ioctl,
+ 	.compat_ioctl       = drm_compat_ioctl,
+ 	.poll               = drm_poll,
+ 	.read               = drm_read,
+diff --git a/msm/msm_fb.c b/msm/msm_fb.c
+index ee6a475..d3f5b82 100644
+--- a/msm/msm_fb.c
++++ b/msm/msm_fb.c
+@@ -159,14 +159,22 @@ struct drm_framebuffer *msm_framebuffer_create(struct drm_device *dev,
+ 		}
+ 	}
+ 
+-	fb = msm_framebuffer_init(dev, mode_cmd, bos);
+-	if (IS_ERR(fb)) {
+-		ret = PTR_ERR(fb);
+-		goto out_unref;
++	{
++		static atomic_t caly_fb_cnt = ATOMIC_INIT(15);
++		fb = msm_framebuffer_init(dev, mode_cmd, bos);
++		if (IS_ERR(fb)) {
++			ret = PTR_ERR(fb);
++			pr_emerg("CALY_DRM: fb_create FAIL fmt=0x%x mod=0x%llx ret=%d\n",
++				mode_cmd->pixel_format, (unsigned long long)mode_cmd->modifier[0], ret);
++			goto out_unref;
++		}
++		if (atomic_dec_if_positive(&caly_fb_cnt) >= 0)
++			pr_emerg("CALY_DRM: fb_create OK id=%u %ux%u fmt=0x%x mod=0x%llx\n",
++				fb->base.id, mode_cmd->width, mode_cmd->height,
++				mode_cmd->pixel_format, (unsigned long long)mode_cmd->modifier[0]);
++		return fb;
+ 	}
+ 
+-	return fb;
+-
+ out_unref:
+ 	for (i = 0; i < n; i++)
+ 		drm_gem_object_put(bos[i]);
+diff --git a/msm/sde/sde_crtc.c b/msm/sde/sde_crtc.c
+index cd966d8..b41caff 100644
+--- a/msm/sde/sde_crtc.c
++++ b/msm/sde/sde_crtc.c
+@@ -34,7 +34,7 @@
+ #endif
+ #include <linux/version.h>
+ #if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+-#include <qcom_sync_file.h>
++#include <linux/sync_file.h>
+ #else
+ #include <linux/soc/qcom/qcom_sync_file.h>
+ #endif
+diff --git a/msm/sde/sde_vbif.c b/msm/sde/sde_vbif.c
+index 5a115db..731dd25 100644
+--- a/msm/sde/sde_vbif.c
++++ b/msm/sde/sde_vbif.c
+@@ -633,6 +633,8 @@ void sde_vbif_init_memtypes(struct sde_kms *sde_kms)
+ 		vbif = sde_kms->hw_vbif[i];
+ 		if (vbif && vbif->cap && vbif->ops.set_mem_type) {
+ 			mutex_lock(&vbif->mutex);
++			SDE_REG_WRITE(&vbif->hw, 0x0208, 0);
++			wmb();
+ 			for (j = 0; j < vbif->cap->memtype_count; j++)
+ 				vbif->ops.set_mem_type(
+ 						vbif, j, vbif->cap->memtype[j]);
+@@ -645,6 +647,9 @@ void sde_vbif_axi_halt_request(struct sde_kms *sde_kms)
+ {
+ 	struct sde_hw_vbif *vbif;
+ 	int i;
++	(void)vbif;
++	(void)i;
++	return;
+ 
+ 	if (!sde_kms) {
+ 		SDE_ERROR("invalid argument\n");
+diff --git a/msm/sde_dbg.c b/msm/sde_dbg.c
+index 8dd913b..9b14c83 100644
+--- a/msm/sde_dbg.c
++++ b/msm/sde_dbg.c
+@@ -1343,8 +1343,8 @@ static void _sde_dump_array(bool do_panic, const char *name, bool dump_secure, u
+ 	if (!skip_power)
+ 		pm_runtime_put_sync(dbg_base->dev);
+ 
+-	if (do_panic && dbg_base->panic_on_err && (!in_dump))
+-		panic(name);
++	if (do_panic && (!in_dump))
++		pr_emerg("CALY_DRM: prevented panic(%s)\n", name);
+ 
+ 	mutex_unlock(&dbg_base->mutex);
+ }
+@@ -1544,7 +1544,7 @@ void sde_dbg_ctrl(const char *name, ...)
+ 		if (!strcmp(blk_name, "reset_hw_panic") &&
+ 				sde_dbg_base.debugfs_ctrl & DBG_CTRL_RESET_HW_PANIC) {
+ 			pr_debug("reset hw panic\n");
+-			panic("reset_hw");
++			pr_emerg("CALY_DRM: prevented panic(reset_hw)\n");
+ 		}
+ 	}
+ 
+@@ -2669,7 +2669,7 @@ int sde_dbg_init(struct device *dev)
+ 	INIT_WORK(&sde_dbg_base.dump_work, _sde_dump_work);
+ 	sde_dbg_base.work_panic = false;
+ 	sde_dbg_base.coredump_reading = false;
+-	sde_dbg_base.panic_on_err = DEFAULT_PANIC;
++	sde_dbg_base.panic_on_err = 0;
+ 	sde_dbg_base.dump_option = SDE_DBG_DEFAULT_DUMP_MODE;
+ 	sde_dbg_base.dump_blk_mask = SDE_DBG_BUILT_IN_ALL;
+ 	memset(&sde_dbg_base.regbuf, 0, sizeof(sde_dbg_base.regbuf));
