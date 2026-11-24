@@ -184,3 +184,5 @@ bcl_soc.ko
 ddr_cdev.ko
 thermal_pause.ko
 qti_thermal_vendor_hooks.ko
+qcom_lpm.ko
+qcom_stats.ko
