@@ -9,7 +9,7 @@
 - Full hardware bring-up: 120Hz Visionox AMOLED, Adreno 642L GPU, FocalTech FT3680 touch, Goodix optical UDFPS, Wi-Fi 6/6E, 4G/5G RIL + Mobile Data, Bluetooth, PM7325B battery + USB-C role-switch, 36/36 sensors, WCD938x + TFA98xx stereo audio + camcorder-mic, Spectra ISP camera, Iris2 HW video encode/decode, 36 thermal zones + 25 cooling devices (TSENS + LMH + BCL)
 - Full SM7325 Deep Sleep (`D0/D1/D2` cluster collapse via `qcom-cpu-lpm` + `qcom_stats`) and permanent WCN6750 Runtime PM fix (`caly_rproc_boot`) eliminating silent `PS_HOLD` hard resets
 - Persistent `ramoops` crash logging (256KB record buffer with 16-byte Reed-Solomon ECC)
-- CALY-Daitaku tuning: Samsung SSG I/O scheduler, TCP BBR + FQ default, ZRAM LZ4, SELinux AVC ratelimit, Binder -10 sync priority floor, F2FS fsync scaling, clean upstream VM defaults (`swappiness=60`, `watermark_scale_factor=10`)
+- CALY-Daitaku tuning: Samsung SSG I/O scheduler, TCP BBR + FQ default, ZRAM LZ4, SELinux AVC ratelimit, Binder -10 sync priority floor, F2FS fsync scaling, Android-tuned VM defaults (`swappiness=60`, `watermark_scale_factor=10`, THP default `never`, `compaction_proactiveness=0`)
 - Optional root via official `backslashxx/KernelSU`
 
 ## Repository Layout
