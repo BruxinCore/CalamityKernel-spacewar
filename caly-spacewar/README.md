@@ -28,3 +28,7 @@
 - **KernelSU:** `backslashxx/KernelSU` and `tiann/KernelSU`
 - **AnyKernel3:** `osm0sis/AnyKernel3`
 - **Spacewar 6.12 Bring-Up, Forensics, Modules, Patches & Tuning:** NerokiStyle (`BruxinCore`)
+
+## License, Attribution & Official Releases
+- Licensed under GNU GPLv2. Any fork, port, or derivative using Spacewar 6.12 device trees, authorial modules (`caly_rproc_boot`, `caly_ashmem`, `caly_compat`), or surgical patches must preserve original authorship and commit history (`NerokiStyle / BruxinCore` and all upstream contributors).
+- Official signed/verified releases and SHA-256 checksums are published exclusively at: `https://github.com/BruxinCore/CalamityKernel-spacewar/releases`

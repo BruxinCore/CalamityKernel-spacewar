@@ -294,3 +294,5 @@ static void __exit caly_ashmem_exit(void)
 module_init(caly_ashmem_init);
 module_exit(caly_ashmem_exit);
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("NerokiStyle (BruxinCore)");
+MODULE_DESCRIPTION("CALY-Daitaku Spacewar Linux 6.12 ashmem compatibility driver");

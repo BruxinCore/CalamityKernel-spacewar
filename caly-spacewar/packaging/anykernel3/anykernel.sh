@@ -20,6 +20,7 @@ RAMDISK_COMPRESSION=auto;
 PATCH_VBMETA_FLAG=auto;
 
 . tools/ak3-core.sh;
+ui_print " - Official source: https://github.com/BruxinCore/CalamityKernel-spacewar";
 
 dump_boot;
 write_boot;

@@ -288,3 +288,5 @@ static void __exit caly_rproc_boot_exit(void)
 module_init(caly_rproc_boot_init);
 module_exit(caly_rproc_boot_exit);
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("NerokiStyle (BruxinCore)");
+MODULE_DESCRIPTION("CALY-Daitaku Spacewar remoteproc auto-boot and WCN6750 runtime PM guard");

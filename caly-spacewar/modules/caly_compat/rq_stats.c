@@ -96,3 +96,5 @@ static void __exit caly_rq_stats_exit(void)
 module_init(caly_rq_stats_init);
 module_exit(caly_rq_stats_exit);
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("NerokiStyle (BruxinCore)");
+MODULE_DESCRIPTION("CALY-Daitaku Spacewar legacy rq_stats sysfs compatibility driver");

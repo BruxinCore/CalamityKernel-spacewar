@@ -190,3 +190,5 @@ static void __exit caly_ssr_param_exit(void)
 module_init(caly_ssr_param_init);
 module_exit(caly_ssr_param_exit);
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("NerokiStyle (BruxinCore)");
+MODULE_DESCRIPTION("CALY-Daitaku Spacewar legacy subsystem_restart compatibility driver");
