@@ -557,12 +557,13 @@
 			ramoops@83a00000 {
 				compatible = "ramoops";
 				reg = <0x00 0x83a00000 0x00 0x400000>;
-				record-size = <0x00>;
-				console-size = <0x200000>;
+				record-size = <0x40000>;
+				console-size = <0x1c0000>;
 				ftrace-size = <0x00>;
 				pmsg-size = <0x200000>;
 				mem-type = <0x00>;
-				ecc-size = <0x00>;
+				ecc-size = <0x10>;
+				dump-oops;
 			};
 		};
 	};
