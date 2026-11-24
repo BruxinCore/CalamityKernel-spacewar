@@ -108,7 +108,7 @@ static __poll_t pidfd_poll(struct file *file, struct poll_table_struct *pts)
 	guard(rcu)();
 	task = pid_task(pid, PIDTYPE_PID);
 	if (!task)
-		poll_flags = EPOLLIN | EPOLLRDNORM | EPOLLHUP;
+		poll_flags = EPOLLIN | EPOLLRDNORM;
 	else if (task->exit_state && !delay_group_leader(task))
 		poll_flags = EPOLLIN | EPOLLRDNORM;
 
