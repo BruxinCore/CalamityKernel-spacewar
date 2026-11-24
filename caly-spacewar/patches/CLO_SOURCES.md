@@ -22,7 +22,7 @@ only the surgical bring-up diffs authored for Nothing Phone (1) (Spacewar / SM73
 
 ## Stock Spacewar 5.4 Vendor Modules Ported to Linux 6.12 APIs (Out-of-Tree)
 
-Compiled cleanly against the `6.12.81-CALY-Daitaku` GKI `Module.symvers` (`0` bad CRCs)
+Compiled cleanly against the `6.12.81-CALY-Daitaku-Stable` GKI `Module.symvers` (`0` bad CRCs)
 and shipped in `vendor_boot` ramdisk (see `caly-spacewar/packaging/anykernel3/modules.load`):
 - **Spectra Camera ISP** (`camera.ko` - Qualcomm / NothingOSS Lahaina camera-kernel)
 - **Iris2 HW Video Codec** (`msm_video.ko` - Qualcomm Lahaina video-driver, `UBSAN_SANITIZE=n`)

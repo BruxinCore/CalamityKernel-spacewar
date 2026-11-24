@@ -1,0 +1,22 @@
+--- a/drivers/cpuidle/governors/qcom-lpm.c
++++ b/drivers/cpuidle/governors/qcom-lpm.c
+@@ -63,6 +63,7 @@
+ bool bias_disabled;
+ bool prediction_disabled;
+ bool sleep_disabled = true;
++static bool caly_lpm_auto_enabled;
+ 
+ static bool suspend_in_progress;
+ static bool traces_registered;
+@@ -96,6 +97,11 @@
+ 	if (!check_cpu_isactive(cpu))
+ 		return false;
+ 
++	if (unlikely(!caly_lpm_auto_enabled) && ktime_to_ns(ktime_get()) >= 45000000000LL) {
++		caly_lpm_auto_enabled = true;
++		sleep_disabled = false;
++	}
++
+ 	if (sleep_disabled)
+ 		return true;
+ 
