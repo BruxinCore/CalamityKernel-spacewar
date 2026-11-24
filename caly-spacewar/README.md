@@ -3,7 +3,7 @@
 100% authorial bring-up of Linux 6.12.81 LTS (Android 16 GKI base) for Nothing Phone (1) (`Spacewar`, Snapdragon 778G+ `SM7325-AE` / `Yupik`).
 
 ## Highlights
-- Clean kernel release: `6.12.81-CALY-Daitaku` with 100% GKI KABI compatibility (`17862/17862` symbols intact)
+- Clean kernel release: `6.12.81-CALY-Daitaku-Stable` with 100% GKI KABI compatibility (`17862/17862` symbols intact)
 - Universal ROM support across Nothing OS, AOSP, LineageOS, and HyperOS (preserves installed ROM `fstab.*`)
 - Zero VINTF boot warning dialog without touching `/system`
 - Full hardware bring-up: 120Hz Visionox AMOLED, Adreno 642L GPU, FocalTech FT3680 touch, Goodix optical UDFPS, Wi-Fi 6/6E, 4G/5G RIL + Mobile Data, Bluetooth, PM7325B battery + USB-C role-switch, 36/36 sensors, WCD938x + TFA98xx stereo audio + camcorder-mic, Spectra ISP camera, Iris2 HW video encode/decode, 36 thermal zones + 25 cooling devices (TSENS + LMH + BCL)

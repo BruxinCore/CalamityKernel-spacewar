@@ -1,5 +1,5 @@
 properties() { '
-kernel.string=CALY-Daitaku 6.12.81 LTS by NerokiStyle
+kernel.string=CALY-Daitaku-Stable 6.12.81 LTS by NerokiStyle
 do.devicecheck=1
 do.modules=0
 do.systemless=1
@@ -57,6 +57,7 @@ update_vrd() {
   cp -af "$AKHOME/caly_payload/modules/"* "$base/lib/modules/";
   ln -sf . "$base/lib/modules/5.4-gki";
   ln -sf . "$base/lib/modules/6.12.81-CALY-Daitaku";
+  ln -sf . "$base/lib/modules/6.12.81-CALY-Daitaku-Stable";
   if [ -f "$AKHOME/caly_payload/firmware/tfa98xx.cnt" ]; then
     mkdir -p "$base/lib/firmware";
     cp -af "$AKHOME/caly_payload/firmware/tfa98xx.cnt" "$base/lib/firmware/tfa98xx.cnt";
