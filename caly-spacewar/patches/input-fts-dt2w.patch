@@ -1,0 +1,70 @@
+diff --git a/Makefile b/Makefile
+--- a/Makefile
++++ b/Makefile
+@@ -1,3 +1,4 @@
++ccflags-y += -DCONFIG_QCOM_PANEL_EVENT_NOTIFIER_MODULE=1
+ ccflags-y += -I$(src) -I$(src)/include -I$(STAGING)/include -I$(STAGING)/include/uapi
+ obj-m += fts_tp.o
+ fts_tp-y := focaltech_core.o focaltech_ex_fun.o focaltech_ex_mode.o focaltech_gesture.o focaltech_esdcheck.o focaltech_point_report_check.o focaltech_flash.o focaltech_spi.o
+diff --git a/focaltech_config.h b/focaltech_config.h
+--- a/focaltech_config.h
++++ b/focaltech_config.h
+@@ -215,7 +215,7 @@
+  * Gesture function enable
+  * default: disable
+  */
+-#define FTS_GESTURE_EN                          0
++#define FTS_GESTURE_EN                          1
+ 
+ /*
+  * ESD check & protection
+diff --git a/focaltech_gesture.c b/focaltech_gesture.c
+--- a/focaltech_gesture.c
++++ b/focaltech_gesture.c
+@@ -97,6 +97,27 @@
+ * Static variables
+ *****************************************************************************/
+ static struct fts_gesture_st fts_gesture_data;
++static struct kobject *caly_soc_kobj;
++
++static void caly_fts_create_legacy_spi_link(struct device *dev)
++{
++    struct device *d;
++    struct device *spi_ctrl = NULL;
++    struct device *soc_dev = NULL;
++
++    for (d = dev; d; d = d->parent) {
++        if (!spi_ctrl && strcmp(dev_name(d), "a94000.spi") == 0)
++            spi_ctrl = d;
++        if (!soc_dev && strcmp(dev_name(d), "soc") == 0)
++            soc_dev = d;
++    }
++    if (spi_ctrl && soc_dev && spi_ctrl->parent != soc_dev) {
++        if (sysfs_create_link(&soc_dev->kobj, &spi_ctrl->kobj, "a94000.spi") == 0)
++            caly_soc_kobj = &soc_dev->kobj;
++    }
++}
++
++
+ 
+ /*****************************************************************************
+ * Global variable or extern global variabls/functions
+@@ -552,6 +573,7 @@
+     __set_bit(KEY_GESTURE_FINGER, input_dev->keybit);
+ 
+     fts_create_gesture_sysfs(ts_data->dev);
++    caly_fts_create_legacy_spi_link(ts_data->dev);
+ 
+     memset(&fts_gesture_data, 0, sizeof(struct fts_gesture_st));
+     ts_data->gesture_bmode = GESTURE_BM_REG;
+@@ -572,6 +594,10 @@
+ int fts_gesture_exit(struct fts_ts_data *ts_data)
+ {
+     FTS_FUNC_ENTER();
++    if (caly_soc_kobj) {
++        sysfs_remove_link(caly_soc_kobj, "a94000.spi");
++        caly_soc_kobj = NULL;
++    }
+     sysfs_remove_group(&ts_data->dev->kobj, &fts_gesture_group);
+     FTS_FUNC_EXIT();
+     return 0;

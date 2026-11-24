@@ -30,4 +30,4 @@ and shipped in `vendor_boot` ramdisk (see `caly-spacewar/packaging/anykernel3/mo
 - **QTI Flash LED** (`leds-qti-flash.ko`)
 - **SLIMbus & BT/FM** (`slimbus.ko`, `slim_qcom_ngd_ctrl.ko`, `bt_fm_slim.ko`, `btpower.ko`)
 - **SMCInvoke / QSEECOM** (`smcinvoke_dlkm.ko`, `qseecom_dlkm.ko`)
-- **FocalTech FT3680 Touch, Goodix UDFPS, AAC RichTap Haptics**
+- **FocalTech FT3680 Touch** (`fts_tp.ko` -> `input-fts-dt2w.patch`), **Goodix UDFPS**, **AAC RichTap Haptics**
