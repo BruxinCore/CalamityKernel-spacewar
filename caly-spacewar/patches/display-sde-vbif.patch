@@ -1,3 +1,12 @@
+diff --git a/config/qcomdispconf.h b/config/qcomdispconf.h
+index 46f92c1..57803df 100644
+--- a/config/qcomdispconf.h
++++ b/config/qcomdispconf.h
+@@ -12,3 +12,4 @@
+ #define CONFIG_DRM_MSM_REGISTER_LOGGING 1
+ #define CONFIG_DRM_SDE_EVTLOG_DEBUG 1
+ #define CONFIG_QCOM_MDSS_PLL 1
++#define CONFIG_QCOM_PANEL_EVENT_NOTIFIER_MODULE 1
 diff --git a/msm/dsi/dsi_ctrl.c b/msm/dsi/dsi_ctrl.c
 index e79e76a..fa96ddc 100644
 --- a/msm/dsi/dsi_ctrl.c
@@ -173,6 +182,19 @@ index cd966d8..b41caff 100644
  #else
  #include <linux/soc/qcom/qcom_sync_file.h>
  #endif
+diff --git a/msm/sde/sde_kms.c b/msm/sde/sde_kms.c
+index b5f8446..70acfff 100644
+--- a/msm/sde/sde_kms.c
++++ b/msm/sde/sde_kms.c
+@@ -1054,7 +1054,7 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
+ 				continue;
+ 
+ 			panel_type = sde_encoder_is_primary_display(
+-				connector->encoder) ?
++				connector->encoder ? connector->encoder : c_conn->encoder) ?
+ 				PANEL_EVENT_NOTIFICATION_PRIMARY :
+ 				PANEL_EVENT_NOTIFICATION_SECONDARY;
+ 
 diff --git a/msm/sde/sde_vbif.c b/msm/sde/sde_vbif.c
 index 5a115db..731dd25 100644
 --- a/msm/sde/sde_vbif.c
