@@ -1,0 +1,257 @@
+diff --git a/Kbuild b/Kbuild
+index 698747f..ee9be55 100644
+--- a/Kbuild
++++ b/Kbuild
+@@ -13,6 +13,9 @@ ifeq ($(CONFIG_QTI_QUIN_GVM),)
+ 	endif
+ endif
+ 
++ifeq ($(CONFIG_ARCH_LAHAINA), y)
++	include $(KGSL_PATH)/config/gki_waipiodisp.conf
++endif
+ ifeq ($(CONFIG_ARCH_WAIPIO), y)
+ 	include $(KGSL_PATH)/config/gki_waipiodisp.conf
+ endif
+diff --git a/governor_msm_adreno_tz.c b/governor_msm_adreno_tz.c
+index 7b58719..b94e109 100644
+--- a/governor_msm_adreno_tz.c
++++ b/governor_msm_adreno_tz.c
+@@ -1,3 +1,4 @@
++#include <linux/of.h>
+ // SPDX-License-Identifier: GPL-2.0-only
+ /*
+  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
+diff --git a/kgsl.c b/kgsl.c
+index 3d087f5..512250c 100644
+--- a/kgsl.c
++++ b/kgsl.c
+@@ -58,7 +58,7 @@
+ #endif
+ 
+ #if defined(CONFIG_ARM64) || defined(CONFIG_ARM_LPAE)
+-#define KGSL_DMA_BIT_MASK	DMA_BIT_MASK(64)
++#define KGSL_DMA_BIT_MASK	~0ULL
+ #else
+ #define KGSL_DMA_BIT_MASK	DMA_BIT_MASK(32)
+ #endif
+@@ -1541,8 +1541,10 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
+ 	filep->private_data = dev_priv;
+ 
+ 	result = kgsl_open_device(device);
+-	if (result)
++	if (result) {
++		pr_emerg("CALY_KGSL: open_device FAIL comm=%s ret=%d\n", current->comm, result);
+ 		goto err;
++	}
+ 
+ 	/*
+ 	 * Get file (per process) private struct. This must be done
+@@ -1552,6 +1554,7 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
+ 	dev_priv->process_priv = kgsl_process_private_open(device);
+ 	if (IS_ERR(dev_priv->process_priv)) {
+ 		result = PTR_ERR(dev_priv->process_priv);
++		pr_emerg("CALY_KGSL: process_private_open FAIL comm=%s ret=%d\n", current->comm, result);
+ 		kgsl_close_device(device);
+ 		goto err;
+ 	}
+@@ -1562,6 +1565,7 @@ err:
+ 		kfree(dev_priv);
+ 		pm_runtime_put(&device->pdev->dev);
+ 	}
++
+ 	return result;
+ }
+ 
+@@ -2362,6 +2366,17 @@ done:
+ 	 * -EPROTO is a "success" error - it just tells the user that the
+ 	 * context had previously faulted
+ 	 */
++	if (result == -EFAULT) {
++		static int caly_ef_cnt;
++		if (caly_ef_cnt < 6) {
++			caly_ef_cnt++;
++			pr_emerg("CALY_KGSL_EF#%d: comm=%s fl=%#llx cmd=%#llx/%u*%u obj=%#llx/%u*%u sync=%#llx/%u*%u type=%#x\n",
++				caly_ef_cnt, current->comm, (unsigned long long)param->flags,
++				(unsigned long long)param->cmdlist, param->cmdsize, param->numcmds,
++				(unsigned long long)param->objlist, param->objsize, param->numobjs,
++				(unsigned long long)param->synclist, param->syncsize, param->numsyncs, type);
++		}
++	}
+ 	if (result && result != -EPROTO)
+ 		while (i--)
+ 			kgsl_drawobj_destroy(drawobj[i]);
+@@ -3395,7 +3410,7 @@ static int verify_secure_access(struct kgsl_device *device,
+ 
+ 	if (mem_buf_dma_buf_copy_vmperm(dmabuf, (int **)&vmid_list,
+ 		(int **)&perms_list, (int *)&nelems)) {
+-		dev_info(device->dev, "Skipped access check\n");
++		dev_dbg(device->dev, "Skipped access check\n");
+ 		return 0;
+ 	}
+ 
+@@ -5159,7 +5174,7 @@ static struct kobj_type kgsl_gpu_sysfs_ktype = {
+ 
+ static int _register_device(struct kgsl_device *device)
+ {
+-	static u64 dma_mask = (u64)DMA_BIT_MASK(64);
++	static u64 dma_mask = (u64)~0ULL;
+ 	static struct device_dma_parameters dma_parms;
+ 	int minor, ret;
+ 	dev_t dev;
+@@ -5422,7 +5437,7 @@ void kgsl_core_exit(void)
+ 
+ int __init kgsl_core_init(void)
+ {
+-	static u64 dma_mask = (u64)DMA_BIT_MASK(64);
++	static u64 dma_mask = (u64)~0ULL;
+ 	static struct device_dma_parameters dma_parms;
+ 	int result = 0;
+ 
+diff --git a/kgsl_drawobj.c b/kgsl_drawobj.c
+index eaac2fc..3e42f32 100644
+--- a/kgsl_drawobj.c
++++ b/kgsl_drawobj.c
+@@ -28,6 +28,26 @@
+ #include "kgsl_drawobj.h"
+ #include "kgsl_eventlog.h"
+ #include "kgsl_sync.h"
++
++static inline int caly_copy_struct_from_user(void *dst, size_t ksize,
++		const void __user *src, size_t usize)
++{
++	size_t copy = ksize < usize ? ksize : usize;
++	static int caly_sz_logged;
++
++	if (usize != ksize && caly_sz_logged < 6) {
++		caly_sz_logged++;
++		pr_emerg("CALY_KGSL_CPY: comm=%s ksize=%zu usize=%zu\n",
++			current->comm, ksize, usize);
++	}
++	if (copy == 0)
++		return -EINVAL;
++	if (usize < ksize)
++		memset((u8 *)dst + copy, 0, ksize - copy);
++	if (copy_from_user(dst, src, copy))
++		return -EFAULT;
++	return 0;
++}
+ #include "kgsl_timeline.h"
+ #include "kgsl_trace.h"
+ #include "kgsl_util.h"
+@@ -536,7 +556,7 @@ drawobj_get_sync_timeline_priv(void __user *uptr, u64 usize, u32 count)
+ 	for (i = 0; i < count; i++, uptr += usize) {
+ 		struct kgsl_timeline_val val;
+ 
+-		if (copy_struct_from_user(&val, sizeof(val), uptr, usize))
++		if (caly_copy_struct_from_user(&val, sizeof(val), uptr, usize))
+ 			continue;
+ 
+ 		priv[i].timeline = val.timeline;
+@@ -559,7 +579,7 @@ static int drawobj_add_sync_timeline(struct kgsl_device *device,
+ 	unsigned int id;
+ 	int ret;
+ 
+-	if (copy_struct_from_user(&sync, sizeof(sync), uptr, usize))
++	if (caly_copy_struct_from_user(&sync, sizeof(sync), uptr, usize))
+ 		return -EFAULT;
+ 
+ 	fence = kgsl_timelines_to_fence_array(device, sync.timelines,
+@@ -629,7 +649,7 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
+ 	struct event_fence_info *priv;
+ 	unsigned int id, i;
+ 
+-	if (copy_struct_from_user(&sync, sizeof(sync), data, datasize))
++	if (caly_copy_struct_from_user(&sync, sizeof(sync), data, datasize))
+ 		return -EFAULT;
+ 
+ 	kref_get(&drawobj->refcount);
+@@ -766,7 +786,7 @@ static int drawobj_add_sync_timestamp_from_user(struct kgsl_device *device,
+ {
+ 	struct kgsl_cmd_syncpoint_timestamp timestamp;
+ 
+-	if (copy_struct_from_user(&timestamp, sizeof(timestamp),
++	if (caly_copy_struct_from_user(&timestamp, sizeof(timestamp),
+ 			data, datasize))
+ 		return -EFAULT;
+ 
+@@ -943,7 +963,7 @@ static int get_aux_command(void __user *ptr, u64 generic_size,
+ 	struct kgsl_gpu_aux_command_generic generic;
+ 	u64 size;
+ 
+-	if (copy_struct_from_user(&generic, sizeof(generic), ptr, generic_size))
++	if (caly_copy_struct_from_user(&generic, sizeof(generic), ptr, generic_size))
+ 		return -EFAULT;
+ 
+ 	if (generic.type != type)
+@@ -1041,7 +1061,7 @@ int kgsl_drawobj_add_timeline(struct kgsl_device_private *dev_priv,
+ 	for (i = 0; i < cmd.count; i++) {
+ 		struct kgsl_timeline_val val;
+ 
+-		if (copy_struct_from_user(&val, sizeof(val), src,
++		if (caly_copy_struct_from_user(&val, sizeof(val), src,
+ 			cmd.timelines_size)) {
+ 			ret = -EFAULT;
+ 			goto err;
+@@ -1482,7 +1502,7 @@ int kgsl_drawobj_cmd_add_cmdlist(struct kgsl_device *device,
+ 		return ret;
+ 
+ 	for (i = 0; i < count; i++) {
+-		if (copy_struct_from_user(&obj, sizeof(obj), ptr, size))
++		if (caly_copy_struct_from_user(&obj, sizeof(obj), ptr, size))
+ 			return -EFAULT;
+ 
+ 		/* Sanity check the flags */
+@@ -1521,7 +1541,7 @@ int kgsl_drawobj_cmd_add_memlist(struct kgsl_device *device,
+ 		return ret;
+ 
+ 	for (i = 0; i < count; i++) {
+-		if (copy_struct_from_user(&obj, sizeof(obj), ptr, size))
++		if (caly_copy_struct_from_user(&obj, sizeof(obj), ptr, size))
+ 			return -EFAULT;
+ 
+ 		if (!(obj.flags & KGSL_OBJLIST_MEMOBJ)) {
+@@ -1599,7 +1619,7 @@ int kgsl_drawobj_sync_add_synclist(struct kgsl_device *device,
+ 		return -ENOMEM;
+ 
+ 	for (i = 0; i < count; i++) {
+-		if (copy_struct_from_user(&syncpoint, sizeof(syncpoint), ptr, size))
++		if (caly_copy_struct_from_user(&syncpoint, sizeof(syncpoint), ptr, size))
+ 			return -EFAULT;
+ 
+ 		sync.type = syncpoint.type;
+diff --git a/kgsl_ioctl.c b/kgsl_ioctl.c
+index 8657cd6..e61a367 100644
+--- a/kgsl_ioctl.c
++++ b/kgsl_ioctl.c
+@@ -185,10 +185,14 @@ long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
+ 
+ 	if (ret == -ENOIOCTLCMD) {
+ 		if (is_compat_task())
+-			return device->ftbl->compat_ioctl(dev_priv, cmd, arg);
+-
+-		return device->ftbl->ioctl(dev_priv, cmd, arg);
++			ret = device->ftbl->compat_ioctl(dev_priv, cmd, arg);
++		else
++			ret = device->ftbl->ioctl(dev_priv, cmd, arg);
++	}
++	if (ret) {
++		static atomic_t caly_icnt = ATOMIC_INIT(40);
++		if (atomic_dec_if_positive(&caly_icnt) >= 0)
++			pr_emerg("CALY_KGSL: ioctl FAIL comm=%s cmd=0x%x nr=0x%x ret=%ld\n", current->comm, cmd, _IOC_NR(cmd), ret);
+ 	}
+-
+ 	return ret;
+ }
+diff --git a/kgsl_pwrscale.c b/kgsl_pwrscale.c
+index 1227f1f..2c82ad3 100644
+--- a/kgsl_pwrscale.c
++++ b/kgsl_pwrscale.c
+@@ -17,7 +17,7 @@ static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
+ 		.max = 350,
+ 		.floating = true,
+ 	},
+-	.mod_percent = 100,
++	.mod_percent = 140,
+ };
+ 
+ static void do_devfreq_suspend(struct work_struct *work);

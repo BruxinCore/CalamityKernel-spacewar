@@ -1,0 +1,28 @@
+diff --git a/hif/src/hif_runtime_pm.c b/hif/src/hif_runtime_pm.c
+index c165bc3..1939256 100644
+--- a/hif/src/hif_runtime_pm.c
++++ b/hif/src/hif_runtime_pm.c
+@@ -314,11 +314,13 @@ static void hif_runtime_pm_debugfs_create(struct hif_softc *scn)
+ {
+ 	struct hif_runtime_pm_ctx *rpm_ctx = hif_bus_get_rpm_ctx(scn);
+ 
++#ifdef WLAN_OPEN_SOURCE
+ 	rpm_ctx->pm_dentry = qdf_debugfs_create_entry(CNSS_RUNTIME_FILE,
+ 						      CNSS_RUNTIME_FILE_PERM,
+ 						      NULL,
+ 						      scn,
+ 						      &hif_pci_runtime_pm_fops);
++#endif
+ }
+ 
+ /**
+@@ -331,7 +333,9 @@ static void hif_runtime_pm_debugfs_remove(struct hif_softc *scn)
+ {
+ 	struct hif_runtime_pm_ctx *rpm_ctx = hif_bus_get_rpm_ctx(scn);
+ 
++#ifdef WLAN_OPEN_SOURCE
+ 	qdf_debugfs_remove_file(rpm_ctx->pm_dentry);
++#endif
+ }
+ 
+ /**

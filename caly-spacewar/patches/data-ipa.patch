@@ -1,0 +1,49 @@
+diff --git a/drivers/platform/msm/ipa/ipa_clients/ncm_ipa_trace.h b/drivers/platform/msm/ipa/ipa_clients/ncm_ipa_trace.h
+index 2e28c7c..597a527 100644
+--- a/drivers/platform/msm/ipa/ipa_clients/ncm_ipa_trace.h
++++ b/drivers/platform/msm/ipa/ipa_clients/ncm_ipa_trace.h
+@@ -73,7 +73,7 @@ TRACE_EVENT(
+ #ifndef NCM_TRACE_INCLUDE_PATH
+ #ifdef CONFIG_IPA_VENDOR_DLKM
+ #define NCM_TRACE_INCLUDE_PATH \
+-("../../../../vendor/qcom/opensource/dataipa/drivers/platform/msm/ipa/ipa_clients")
++../../../../vendor/qcom/opensource/dataipa/drivers/platform/msm/ipa/ipa_clients
+ #else
+ #define NCM_TRACE_INCLUDE_PATH \
+ ("../../techpack/dataipa/drivers/platform/msm/ipa/ipa_clients")
+diff --git a/drivers/platform/msm/ipa/ipa_v3/ipa.c b/drivers/platform/msm/ipa/ipa_v3/ipa.c
+index ed91ad1..0e0a162 100644
+--- a/drivers/platform/msm/ipa/ipa_v3/ipa.c
++++ b/drivers/platform/msm/ipa/ipa_v3/ipa.c
+@@ -256,8 +256,8 @@ EXPORT_SYMBOL(ipa_is_test_prod_flt_in_sram_internal);
+  */
+ void ipa_assert(void)
+ {
+-	pr_err("IPA: unrecoverable error has occurred, asserting\n");
+-	BUG();
++	pr_err("IPA: unrecoverable error has occurred, asserting (WARN)\n");
++	WARN_ON(1);
+ }
+ EXPORT_SYMBOL(ipa_assert);
+ 
+@@ -8757,8 +8757,9 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
+ 	ipa_ssr_driver_dump_init();
+ 	ipa_ssr_driver_dump_register_region("ipa_ctx", ipa3_ctx,
+ 	 sizeof(struct ipa3_context));
+-	ipa_ssr_driver_dump_register_region("ipc_logs", ipa3_ctx->logbuf,
+-	((struct ipc_log_context *)(ipa3_ctx->logbuf))->write_avail);
++	if (ipa3_ctx->logbuf)
++		ipa_ssr_driver_dump_register_region("ipc_logs", ipa3_ctx->logbuf,
++		((struct ipc_log_context *)(ipa3_ctx->logbuf))->write_avail);
+ 	ipa_ssr_driver_dump_register_region("gsi_ctx", gsi_ctx, sizeof(struct gsi_ctx));
+ 
+ #ifdef CONFIG_IPA_RTP
+@@ -13398,8 +13399,6 @@ static void __exit ipa_module_exit(void)
+ }
+ module_exit(ipa_module_exit);
+ 
+-MODULE_SOFTDEP("pre: subsys-pil-tz");
+-MODULE_SOFTDEP("pre: qcom-arm-smmu-mod");
+ MODULE_LICENSE("GPL v2");
+ MODULE_DESCRIPTION("IPA HW device driver");
+ 

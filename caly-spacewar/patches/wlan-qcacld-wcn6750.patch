@@ -1,0 +1,80 @@
+diff --git a/core/hdd/inc/wlan_hdd_misc.h b/core/hdd/inc/wlan_hdd_misc.h
+index 2ca6877..d8342a6 100644
+--- a/core/hdd/inc/wlan_hdd_misc.h
++++ b/core/hdd/inc/wlan_hdd_misc.h
+@@ -42,8 +42,8 @@
+ #endif
+ 
+ #ifdef MSM_PLATFORM
+-#define WLAN_INI_FILE              "wlan/qca_cld/" PREFIX "WCNSS_qcom_cfg.ini"
+-#define WLAN_MAC_FILE              "wlan/qca_cld/" PREFIX "wlan_mac.bin"
++#define WLAN_INI_FILE              "wlan/qca_cld/qca6750/WCNSS_qcom_cfg.ini"
++#define WLAN_MAC_FILE              "wlan/qca_cld/qca6750/wlan_mac.bin"
+ #else
+ #define WLAN_INI_FILE              "wlan/" PREFIX "qcom_cfg.ini"
+ #define WLAN_MAC_FILE              "wlan/" PREFIX "wlan_mac.bin"
+diff --git a/core/hdd/src/wlan_hdd_debugfs.c b/core/hdd/src/wlan_hdd_debugfs.c
+index 9aff46a..7259d2d 100644
+--- a/core/hdd/src/wlan_hdd_debugfs.c
++++ b/core/hdd/src/wlan_hdd_debugfs.c
+@@ -569,4 +569,46 @@ void hdd_debugfs_exit(struct hdd_adapter *adapter)
+ {
+ 	debugfs_remove_recursive(adapter->debugfs_phy);
+ }
++#else
++#include <qdf_types.h>
++#include <qdf_status.h>
++struct hdd_adapter;
++struct wlan_objmgr_pdev;
++
++QDF_STATUS hdd_debugfs_init(struct hdd_adapter *adapter)
++{
++	return QDF_STATUS_SUCCESS;
++}
++
++void hdd_debugfs_exit(struct hdd_adapter *adapter)
++{
++}
++
++bool hdd_wait_for_debugfs_threads_completion(void)
++{
++	return true;
++}
++
++int hdd_return_debugfs_threads_count(void)
++{
++	return 0;
++}
++
++void hdd_debugfs_thread_increment(void)
++{
++}
++
++void hdd_debugfs_thread_decrement(void)
++{
++}
++
++int wlan_cfg80211_ftm_testmode_cmd(struct wlan_objmgr_pdev *pdev, void *data, uint32_t len)
++{
++	return -EOPNOTSUPP;
++}
++
++QDF_STATUS wlan_cfg80211_ftm_rx_event(struct wlan_objmgr_pdev *pdev, uint8_t *data, uint32_t len)
++{
++	return QDF_STATUS_E_NOSUPPORT;
++}
+ #endif /* #ifdef WLAN_OPEN_SOURCE */
+diff --git a/core/hdd/src/wlan_hdd_main.c b/core/hdd/src/wlan_hdd_main.c
+index 5ca1e0b..de6c536 100644
+--- a/core/hdd/src/wlan_hdd_main.c
++++ b/core/hdd/src/wlan_hdd_main.c
+@@ -17722,6 +17722,9 @@ void hdd_init_start_completion(void)
+ 	INIT_COMPLETION(wlan_start_comp);
+ }
+ 
++#ifndef WLAN_CTRL_NAME
++#define WLAN_CTRL_NAME "wlan"
++#endif
+ #ifdef WLAN_CTRL_NAME
+ static unsigned int dev_num = 1;
+ static struct cdev wlan_hdd_state_cdev;

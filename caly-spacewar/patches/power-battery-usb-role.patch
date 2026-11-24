@@ -1,0 +1,108 @@
+--- a/qti_battery_charger.c
++++ b/qti_battery_charger.c
+@@ -21,6 +21,8 @@
+ #include <linux/reboot.h>
+ #include <linux/thermal.h>
+ #include <linux/soc/qcom/qti_pmic_glink.h>
++#include <linux/usb/role.h>
++#include <linux/of.h>
+ #include <linux/soc/qcom/battery_charger.h>
+ #include <linux/soc/qcom/panel_event_notifier.h>
+ #ifdef CONFIG_QTI_CHARGER_NFC_VREG
+@@ -949,6 +951,57 @@
+ 
+ static struct power_supply_desc usb_psy_desc[NUM_USB_PORTS];
+ 
++
++static enum usb_role caly_last_role = USB_ROLE_NONE;
++static bool caly_role_ever_set;
++
++static void caly_sync_usb_role(struct battery_chg_dev *bcdev,
++			       struct psy_state *pst)
++{
++	struct device_node *np;
++	struct usb_role_switch *sw;
++	enum usb_role target = USB_ROLE_NONE;
++	u32 online = 0, adap = 0, scope = 0;
++
++	if (!bcdev || !pst || !pst->prop)
++		return;
++
++	if (read_property_id(bcdev, pst, USB_ONLINE) == 0)
++		online = pst->prop[USB_ONLINE];
++	if (read_property_id(bcdev, pst, USB_ADAP_TYPE) == 0)
++		adap = pst->prop[USB_ADAP_TYPE];
++	if (read_property_id(bcdev, pst, USB_SCOPE) == 0)
++		scope = pst->prop[USB_SCOPE];
++
++	if (scope == POWER_SUPPLY_SCOPE_SYSTEM) {
++		target = USB_ROLE_HOST;
++	} else if (scope == POWER_SUPPLY_SCOPE_DEVICE || online) {
++		if (adap == POWER_SUPPLY_USB_TYPE_DCP ||
++		    adap == POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID)
++			target = USB_ROLE_NONE;
++		else
++			target = USB_ROLE_DEVICE;
++	}
++
++	if (caly_role_ever_set && target == caly_last_role)
++		return;
++
++	np = of_find_compatible_node(NULL, NULL, "qcom,dwc-usb3-msm");
++	if (!np)
++		return;
++	sw = usb_role_switch_find_by_fwnode(of_fwnode_handle(np));
++	of_node_put(np);
++	if (!sw)
++		return;
++
++	dev_info(bcdev->dev, "CALY_USB_BC: online=%u adap=%u scope=%u -> role=%d\n",
++		 online, adap, scope, target);
++	caly_last_role = target;
++	caly_role_ever_set = true;
++	usb_role_switch_set_role(sw, target);
++	usb_role_switch_put(sw);
++}
++
+ static void battery_chg_update_usb_type_work(struct work_struct *work)
+ {
+ 	struct battery_chg_dev *bcdev = container_of(work,
+@@ -986,6 +1039,8 @@
+ 		if (pst->prop[USB_ADAP_TYPE] == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
+ 			desc->type = POWER_SUPPLY_TYPE_USB;
+ 			pr_debug("Unknown USB adapter type\n");
++			if (i == USB_1_PORT_ID)
++				caly_sync_usb_role(bcdev, pst);
+ 			continue;
+ 		}
+ 
+@@ -1030,6 +1085,8 @@
+ 
+ 	if (bcdev->micro_usb)
+ 		battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
++	if (i == USB_1_PORT_ID)
++		caly_sync_usb_role(bcdev, pst);
+ }
+ 
+ static void battery_chg_check_status_work(struct work_struct *work)
+@@ -1113,6 +1170,8 @@
+ 		pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
+ 		if (bcdev->shutdown_volt_mv > 0)
+ 			schedule_work(&bcdev->battery_check_work);
++		bcdev->usb_active[USB_1_PORT_ID] = true;
++		schedule_work(&bcdev->usb_type_work);
+ 		break;
+ 	case BC_USB_STATUS_GET(USB_1_PORT_ID):
+ 		bcdev->usb_active[USB_1_PORT_ID] = true;
+@@ -3136,6 +3196,11 @@
+ 	rc = battery_chg_init_psy(bcdev);
+ 	if (rc < 0)
+ 		goto error;
++	bcdev->psy_list[PSY_TYPE_BATTERY].prop[BATT_CAPACITY] = 5000;
++	bcdev->psy_list[PSY_TYPE_BATTERY].prop[BATT_STATUS] = POWER_SUPPLY_STATUS_CHARGING;
++	bcdev->psy_list[PSY_TYPE_BATTERY].prop[BATT_HEALTH] = POWER_SUPPLY_HEALTH_GOOD;
++	bcdev->psy_list[PSY_TYPE_BATTERY].prop[BATT_VOLT_NOW] = 3900000;
++	bcdev->psy_list[PSY_TYPE_BATTERY].prop[BATT_TEMP] = 250;
+ 
+ 	bcdev->battery_class.name = "qcom-battery";
+ 
