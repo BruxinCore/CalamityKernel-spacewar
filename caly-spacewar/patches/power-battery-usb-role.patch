@@ -9,13 +9,65 @@
  #include <linux/soc/qcom/battery_charger.h>
  #include <linux/soc/qcom/panel_event_notifier.h>
  #ifdef CONFIG_QTI_CHARGER_NFC_VREG
-@@ -949,6 +951,57 @@
+@@ -142,9 +144,14 @@
+ 	USB_TYPEC_COMPLIANT,
+ 	USB_SCOPE,
+ 	USB_CONNECTOR_TYPE,
+-	F_ACTIVE,
+-	USB_NUM_PORTS,
+-	USB_PROP_MAX,
++	USB_CHARGE_PUMP_ENABLE,
++	USB_CC_ORIENTATION,
++	USB_CHARGE_ENABLE,
++	USB_SLOWCHARGE_ENABLE,
++	USB_CHARGE_POWER,
++	F_ACTIVE = USB_CHARGE_PUMP_ENABLE,
++	USB_NUM_PORTS = USB_CC_ORIENTATION,
++	USB_PROP_MAX = 20,
+ };
+ 
+ enum wireless_property_id {
+@@ -949,6 +956,109 @@
  
  static struct power_supply_desc usb_psy_desc[NUM_USB_PORTS];
  
 +
 +static enum usb_role caly_last_role = USB_ROLE_NONE;
 +static bool caly_role_ever_set;
++static u32 caly_last_adap = POWER_SUPPLY_USB_TYPE_UNKNOWN;
++static bool caly_icl_unvoted;
++
++static bool caly_is_fast_charger_type(u32 adap)
++{
++	switch (adap) {
++	case POWER_SUPPLY_USB_TYPE_DCP:
++	case POWER_SUPPLY_USB_TYPE_C:
++	case POWER_SUPPLY_USB_TYPE_PD:
++	case POWER_SUPPLY_USB_TYPE_PD_DRP:
++	case POWER_SUPPLY_USB_TYPE_PD_PPS:
++	case POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID:
++	case QTI_POWER_SUPPLY_USB_TYPE_HVDCP:
++	case QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3:
++	case QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3P5:
++		return true;
++	default:
++		return false;
++	}
++}
++
++static bool caly_is_data_capable_charger(u32 adap)
++{
++	switch (adap) {
++	case POWER_SUPPLY_USB_TYPE_SDP:
++	case POWER_SUPPLY_USB_TYPE_CDP:
++	case POWER_SUPPLY_USB_TYPE_PD:
++	case POWER_SUPPLY_USB_TYPE_PD_DRP:
++	case POWER_SUPPLY_USB_TYPE_C:
++		return true;
++	default:
++		return false;
++	}
++}
 +
 +static void caly_sync_usb_role(struct battery_chg_dev *bcdev,
 +			       struct psy_state *pst)
@@ -35,14 +87,32 @@
 +	if (read_property_id(bcdev, pst, USB_SCOPE) == 0)
 +		scope = pst->prop[USB_SCOPE];
 +
++	if (online && caly_is_fast_charger_type(adap)) {
++		if (bcdev->usb_icl_ua[USB_1_PORT_ID] != 0 ||
++		    !caly_icl_unvoted || adap != caly_last_adap) {
++			if (adap == POWER_SUPPLY_USB_TYPE_PD ||
++			    adap == POWER_SUPPLY_USB_TYPE_PD_DRP ||
++			    adap == POWER_SUPPLY_USB_TYPE_PD_PPS)
++				write_property_id(bcdev, pst, USB_INPUT_CURR_LIMIT, UINT_MAX);
++			bcdev->usb_icl_ua[USB_1_PORT_ID] = 0;
++			caly_icl_unvoted = true;
++			dev_info(bcdev->dev, "CALY_USB_BC: fast charger detected adap=%u\n", adap);
++		}
++	} else if (!online && adap == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
++		caly_icl_unvoted = false;
++		if (bcdev->usb_icl_ua[USB_1_PORT_ID] != 0) {
++			write_property_id(bcdev, pst, USB_INPUT_CURR_LIMIT, UINT_MAX);
++			bcdev->usb_icl_ua[USB_1_PORT_ID] = 0;
++		}
++	}
++	caly_last_adap = adap;
++
 +	if (scope == POWER_SUPPLY_SCOPE_SYSTEM) {
 +		target = USB_ROLE_HOST;
-+	} else if (scope == POWER_SUPPLY_SCOPE_DEVICE || online) {
-+		if (adap == POWER_SUPPLY_USB_TYPE_DCP ||
-+		    adap == POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID)
-+			target = USB_ROLE_NONE;
-+		else
-+			target = USB_ROLE_DEVICE;
++	} else if (online && caly_is_data_capable_charger(adap)) {
++		target = USB_ROLE_DEVICE;
++	} else {
++		target = USB_ROLE_NONE;
 +	}
 +
 +	if (caly_role_ever_set && target == caly_last_role)
@@ -67,7 +137,7 @@
  static void battery_chg_update_usb_type_work(struct work_struct *work)
  {
  	struct battery_chg_dev *bcdev = container_of(work,
-@@ -986,6 +1039,8 @@
+@@ -986,13 +1096,14 @@
  		if (pst->prop[USB_ADAP_TYPE] == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
  			desc->type = POWER_SUPPLY_TYPE_USB;
  			pr_debug("Unknown USB adapter type\n");
@@ -76,16 +146,23 @@
  			continue;
  		}
  
-@@ -1030,6 +1085,8 @@
+ 		/* Reset usb_icl_ua whenever USB adapter type changes */
+ 		if (pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_SDP &&
+-		    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_CDP &&
+-		    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_PD)
++		    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_CDP)
+ 			bcdev->usb_icl_ua[i] = 0;
+ 
+ 		pr_debug("usb_adap_type: %u\n", pst->prop[USB_ADAP_TYPE]);
+@@ -1030,6 +1141,7 @@
  
  	if (bcdev->micro_usb)
  		battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
-+	if (i == USB_1_PORT_ID)
-+		caly_sync_usb_role(bcdev, pst);
++	caly_sync_usb_role(bcdev, &bcdev->psy_list[PSY_TYPE_USB]);
  }
  
  static void battery_chg_check_status_work(struct work_struct *work)
-@@ -1113,6 +1170,8 @@
+@@ -1113,6 +1225,8 @@
  		pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
  		if (bcdev->shutdown_volt_mv > 0)
  			schedule_work(&bcdev->battery_check_work);
@@ -94,7 +171,240 @@
  		break;
  	case BC_USB_STATUS_GET(USB_1_PORT_ID):
  		bcdev->usb_active[USB_1_PORT_ID] = true;
-@@ -3136,6 +3196,11 @@
+@@ -1217,8 +1331,6 @@
+ 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+ 	POWER_SUPPLY_PROP_CURRENT_NOW,
+ 	POWER_SUPPLY_PROP_CURRENT_MAX,
+-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+-	POWER_SUPPLY_PROP_TEMP,
+ };
+ 
+ static const struct power_supply_desc wls_psy_desc = {
+@@ -1279,9 +1391,12 @@
+ 	/* Allow this only for SDP, CDP or USB_PD and not for other charger types */
+ 	switch (pst->prop[USB_ADAP_TYPE]) {
+ 	case POWER_SUPPLY_USB_TYPE_SDP:
+-	case POWER_SUPPLY_USB_TYPE_PD:
+ 	case POWER_SUPPLY_USB_TYPE_CDP:
+ 		break;
++	case POWER_SUPPLY_USB_TYPE_PD:
++		if (val >= 0)
++			return -EINVAL;
++		break;
+ 	default:
+ 		if (!strcmp(pst->psy->desc->name, "usb-2"))
+ 			bcdev->usb_icl_ua[USB_2_PORT_ID] = 0;
+@@ -2315,6 +2430,84 @@
+ 
+ QTI_CHARGER_RO_SHOW(usb_num_ports, PSY_TYPE_USB, USB_NUM_PORTS);
+ 
++QTI_CHARGER_RO_SHOW(charge_pump_enable, PSY_TYPE_USB, USB_CHARGE_PUMP_ENABLE);
++QTI_CHARGER_RO_SHOW(typec_cc_orientation, PSY_TYPE_USB, USB_CC_ORIENTATION);
++QTI_CHARGER_RO_SHOW(charge_power, PSY_TYPE_USB, USB_CHARGE_POWER);
++
++static ssize_t usb_charger_en_store(const struct class *c,
++				const struct class_attribute *attr,
++				const char *buf, size_t count)
++{
++	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
++						battery_class);
++	bool val;
++	int rc;
++
++	if (kstrtobool(buf, &val))
++		return -EINVAL;
++
++	rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_USB],
++				USB_CHARGE_ENABLE, val);
++	if (rc < 0)
++		return rc;
++
++	return count;
++}
++
++static ssize_t usb_charger_en_show(const struct class *c,
++				const struct class_attribute *attr,
++				char *buf)
++{
++	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
++						battery_class);
++	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
++	int rc;
++
++	rc = read_property_id(bcdev, pst, USB_CHARGE_ENABLE);
++	if (rc < 0)
++		return rc;
++
++	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[USB_CHARGE_ENABLE]);
++}
++static CLASS_ATTR_RW(usb_charger_en);
++
++static ssize_t slowcharge_en_store(const struct class *c,
++				const struct class_attribute *attr,
++				const char *buf, size_t count)
++{
++	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
++						battery_class);
++	u32 val;
++	int rc;
++
++	if (kstrtou32(buf, 16, &val))
++		return -EINVAL;
++
++	rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_USB],
++				USB_SLOWCHARGE_ENABLE, val);
++	if (rc < 0)
++		return rc;
++
++	return count;
++}
++
++static ssize_t slowcharge_en_show(const struct class *c,
++				const struct class_attribute *attr,
++				char *buf)
++{
++	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
++						battery_class);
++	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
++	int rc;
++
++	rc = read_property_id(bcdev, pst, USB_SLOWCHARGE_ENABLE);
++	if (rc < 0)
++		return rc;
++
++	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[USB_SLOWCHARGE_ENABLE]);
++}
++static CLASS_ATTR_RW(slowcharge_en);
++
+ QTI_CHARGER_TYPE_RO_SHOW(usb_real_type, usb, PSY_TYPE_USB, USB_REAL_TYPE);
+ 
+ QTI_CHARGER_RO_SHOW(usb_2_typec_compliant, PSY_TYPE_USB_2, USB_TYPEC_COMPLIANT);
+@@ -2569,6 +2762,11 @@
+ 	&class_attr_usb_num_ports.attr,
+ 	&class_attr_usb_real_type.attr,
+ 	&class_attr_usb_typec_compliant.attr,
++	&class_attr_charge_pump_enable.attr,
++	&class_attr_typec_cc_orientation.attr,
++	&class_attr_usb_charger_en.attr,
++	&class_attr_slowcharge_en.attr,
++	&class_attr_charge_power.attr,
+ 	&class_attr_charge_control_en.attr,
+ 	&class_attr_battery_parallel_cell_count.attr,
+ 	NULL,
+@@ -2593,6 +2791,11 @@
+ 	&class_attr_restrict_cur.attr,
+ 	&class_attr_usb_real_type.attr,
+ 	&class_attr_usb_typec_compliant.attr,
++	&class_attr_charge_pump_enable.attr,
++	&class_attr_typec_cc_orientation.attr,
++	&class_attr_usb_charger_en.attr,
++	&class_attr_slowcharge_en.attr,
++	&class_attr_charge_power.attr,
+ 	&class_attr_charge_control_en.attr,
+ 	&class_attr_battery_parallel_cell_count.attr,
+ 	&class_attr_battery_chg_notify.attr,
+@@ -2622,6 +2825,11 @@
+ 	&class_attr_usb_real_type.attr,
+ 	&class_attr_usb_2_real_type.attr,
+ 	&class_attr_usb_typec_compliant.attr,
++	&class_attr_charge_pump_enable.attr,
++	&class_attr_typec_cc_orientation.attr,
++	&class_attr_usb_charger_en.attr,
++	&class_attr_slowcharge_en.attr,
++	&class_attr_charge_power.attr,
+ 	&class_attr_usb_2_typec_compliant.attr,
+ 	&class_attr_charge_control_en.attr,
+ 	&class_attr_battery_parallel_cell_count.attr,
+@@ -2642,6 +2850,11 @@
+ 	&class_attr_usb_num_ports.attr,
+ 	&class_attr_usb_real_type.attr,
+ 	&class_attr_usb_typec_compliant.attr,
++	&class_attr_charge_pump_enable.attr,
++	&class_attr_typec_cc_orientation.attr,
++	&class_attr_usb_charger_en.attr,
++	&class_attr_slowcharge_en.attr,
++	&class_attr_charge_power.attr,
+ 	&class_attr_charge_control_en.attr,
+ 	&class_attr_battery_parallel_cell_count.attr,
+ 	NULL,
+@@ -2663,6 +2876,11 @@
+ 	&class_attr_usb_real_type.attr,
+ 	&class_attr_usb_2_real_type.attr,
+ 	&class_attr_usb_typec_compliant.attr,
++	&class_attr_charge_pump_enable.attr,
++	&class_attr_typec_cc_orientation.attr,
++	&class_attr_usb_charger_en.attr,
++	&class_attr_slowcharge_en.attr,
++	&class_attr_charge_power.attr,
+ 	&class_attr_usb_2_typec_compliant.attr,
+ 	&class_attr_charge_control_en.attr,
+ 	&class_attr_battery_parallel_cell_count.attr,
+@@ -2742,11 +2960,31 @@
+ 		if (pst->prop[BATT_CHG_CTRL_LIM_MAX] - (bcdev->thermal_fcc_step * len) < 500000)
+ 			len = len - 1;
+ 	} else {
++		int skip = 0;
++		int valid_len;
++		u32 max_fcc = pst->prop[BATT_CHG_CTRL_LIM_MAX];
++
+ 		bcdev->thermal_fcc_step = 0;
+ 		len = rc;
+-		prev = pst->prop[BATT_CHG_CTRL_LIM_MAX];
++		while (skip < len) {
++			rc = of_property_read_u32_index(node, "qcom,thermal-mitigation",
++				skip, &val);
++			if (rc < 0)
++				return rc;
++			if (val <= max_fcc)
++				break;
++			skip++;
++		}
++
++		valid_len = len - skip;
++		if (valid_len <= 0) {
++			bcdev->num_thermal_levels = 0;
++			bcdev->thermal_fcc_ua = max_fcc;
++			return 0;
++		}
+ 
+-		for (i = 0; i < len; i++) {
++		prev = max_fcc;
++		for (i = skip; i < len; i++) {
+ 			rc = of_property_read_u32_index(node, "qcom,thermal-mitigation",
+ 				i, &val);
+ 			if (rc < 0)
+@@ -2761,7 +2999,7 @@
+ 			prev = val;
+ 		}
+ 
+-		bcdev->thermal_levels = devm_kcalloc(bcdev->dev, len + 1,
++		bcdev->thermal_levels = devm_kcalloc(bcdev->dev, valid_len + 1,
+ 						sizeof(*bcdev->thermal_levels),
+ 						GFP_KERNEL);
+ 		if (!bcdev->thermal_levels)
+@@ -2772,14 +3010,14 @@
+ 		 * onwards is for thermal mitigation charging currents.
+ 		 */
+ 
+-		bcdev->thermal_levels[0] = pst->prop[BATT_CHG_CTRL_LIM_MAX];
+-
+-		rc = of_property_read_u32_array(node, "qcom,thermal-mitigation",
+-					&bcdev->thermal_levels[1], len);
+-		if (rc < 0) {
+-			pr_err("Error in reading qcom,thermal-mitigation, rc=%d\n", rc);
+-			return rc;
++		bcdev->thermal_levels[0] = max_fcc;
++		for (i = 0; i < valid_len; i++) {
++			rc = of_property_read_u32_index(node, "qcom,thermal-mitigation",
++				skip + i, &bcdev->thermal_levels[i + 1]);
++			if (rc < 0)
++				return rc;
+ 		}
++		len = valid_len;
+ 	}
+ 
+ 	bcdev->num_thermal_levels = len;
+@@ -3136,6 +3374,11 @@
  	rc = battery_chg_init_psy(bcdev);
  	if (rc < 0)
  		goto error;
