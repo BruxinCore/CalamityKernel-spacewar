@@ -1,0 +1,49 @@
+diff --git a/drivers/leds/leds_aw210xx.c b/drivers/leds/leds_aw210xx.c
+--- a/drivers/leds/leds_aw210xx.c
++++ b/drivers/leds/leds_aw210xx.c
+@@ -2754,6 +2754,26 @@
+ 
+ 
+ 
++static struct kobject *caly_aw210xx_soc_kobj;
++
++static void caly_aw210xx_create_legacy_i2c_link(struct device *dev)
++{
++	struct device *d;
++	struct device *i2c_ctrl = NULL;
++	struct device *soc_dev = NULL;
++
++	for (d = dev; d; d = d->parent) {
++		if (!i2c_ctrl && strcmp(dev_name(d), "984000.i2c") == 0)
++			i2c_ctrl = d;
++		if (!soc_dev && strcmp(dev_name(d), "soc") == 0)
++			soc_dev = d;
++	}
++	if (i2c_ctrl && soc_dev && i2c_ctrl->parent != soc_dev) {
++		if (sysfs_create_link(&soc_dev->kobj, &i2c_ctrl->kobj, "984000.i2c") == 0)
++			caly_aw210xx_soc_kobj = &soc_dev->kobj;
++	}
++}
++
+ static int aw210xx_i2c_probe(struct i2c_client *i2c)
+ {
+ 
+@@ -2832,6 +2852,7 @@
+ 		AW_ERR("%s: misc_register failed\n", __func__);
+ 	}
+ 
++	caly_aw210xx_create_legacy_i2c_link(&i2c->dev);
+ 	device_init_wakeup(aw210xx->dev, true);
+ 
+ 	AW_INFO("probe completed!\n");
+@@ -2851,6 +2872,10 @@
+ {
+ 	struct aw210xx *aw210xx = i2c_get_clientdata(i2c);
+ 
++	if (caly_aw210xx_soc_kobj) {
++		sysfs_remove_link(caly_aw210xx_soc_kobj, "984000.i2c");
++		caly_aw210xx_soc_kobj = NULL;
++	}
+ 	sysfs_remove_group(&aw210xx->cdev.dev->kobj, &aw210xx_attribute_group);
+ 	led_classdev_unregister(&aw210xx->cdev);
+ }
